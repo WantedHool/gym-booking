@@ -206,6 +206,12 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 
 > TDD για tenant isolation & auth logic. Scaffolding (Identity wiring) = pragmatic steps.
 
+### Αποφάσεις Φάσης 1 (κλειδωμένες)
+- **Authorization = named policies πάνω από roles** _(2026-07-04)_. Ορίζουμε policies (`RequireAdmin`, `RequireInstructor`) στο `Program.cs` και χρησιμοποιούμε `[Authorize(Policy=...)]` — όχι σκόρπια `[Authorize(Roles="...")]` strings. Λόγοι: καθαρότερο, future-proof (πρόσθετα requirements χωρίς αλλαγή controllers).
+  - **Resource ownership** ("ακυρώνεις μόνο τη δική σου κράτηση") = ρητός έλεγχος στο **service layer** (`entity.UserId == currentUserId`), **όχι** custom `AuthorizationHandler` ακόμα.
+  - **Tenant isolation** = EF global query filters + tenant middleware (ορθογώνιο, όχι authorization policy).
+  - **Αναβάθμιση** σε custom requirements/handlers μόνο αν εμφανιστεί κανόνας πέρα από «ρόλος + ownership» (granular permissions, gating βάσει subscription status, feature flags).
+
 ### Task 10: Base entities + Identity
 
 **Files:** Create entities σε `GymBooking.Core` (Tenant, ApplicationUser, Role, Invitation); Modify `AppDbContext`
