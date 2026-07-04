@@ -8,6 +8,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <!-- Override transitive Microsoft.OpenApi 2.0.0 (NU1903 high-severity vuln) with patched 2.x -->
     <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
   </ItemGroup>
