@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <!-- Override transitive Microsoft.OpenApi 2.0.0 (NU1903 high-severity vuln) with patched 2.x -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GymBooking.Core\GymBooking.Core.csproj" />
+    <ProjectReference Include="..\GymBooking.Data\GymBooking.Data.csproj" />
+  </ItemGroup>
+
+</Project>
