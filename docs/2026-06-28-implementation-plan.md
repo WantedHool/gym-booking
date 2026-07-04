@@ -218,6 +218,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
   - Register πεδία: **password + FirstName/LastName** (προστίθενται στον `ApplicationUser`).
   - Token: τυχαίο 32 bytes, αποθηκευμένο **hashed**, **7 μέρες** λήξη, **μιας χρήσης**· raw token μόνο στο email link. Dev email → Papercut. Μετά την εγγραφή → redirect σε login.
 - **Seed values** _(2026-07-04)_: Tenant `Demo Gym` / slug `demo-gym` / CancellationHours `24`· Admin `admin@demo.gym` / `Admin123!`· ρόλοι User/Instructor/Admin. Τιμές σε **`appsettings.Development.json` → `Seed`** (όχι hardcoded), τρέχει μόνο σε άδεια βάση. Identity default password policy. Πραγματικό branding (όνομα/logo) = μελλοντικό cosmetic πέρασμα.
+- **JWT storage (FE) = `localStorage`** _(2026-07-04)_: access-token-only για τη Φ1 (απλό, επιβιώνει refresh). Αποδεκτό λόγω short-lived token (~1-2h) + Angular auto-sanitize. Φ2 σκληραίνει: access σε μνήμη + refresh σε httpOnly cookie.
 
 ### Task 10: Base entities + Identity
 
