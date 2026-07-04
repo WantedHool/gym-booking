@@ -61,7 +61,9 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [ ] Φ7 — Admin/staff dashboard + responsive QA
 - [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
 
-**Τώρα δουλεύω:** Setup ✅ (2026-07-04, 9 commits). Επόμενο: **Φάση 1 (Auth)** — προς συζήτηση scope/λεπτομερειών πριν την έναρξη.
+**Τώρα δουλεύω:** Setup ✅. Αποφάσεις Φ1 **κλειδωμένες** (βλ. plan → «Αποφάσεις Φάσης 1»). **Επόμενο: υλοποίηση Φ1 — Task 10** (base entities Tenant/ApplicationUser/Invitation + Identity + 1ο migration).
+> ⚙️ **Μοτίβο υλοποίησης:** ο **χρήστης γράφει** τον feature κώδικα, ο Claude **καθοδηγεί/εξηγεί/κάνει review** (όχι να γράφει τα πάντα). Πριν από κάθε ενέργεια → επιβεβαίωση.
+> 🚀 **Πριν κωδικοποίηση:** `nvm use 20` (frontend) · `docker compose -f docker/docker-compose.yml up -d` (DB).
 
 ## Σημειώσεις / ανοιχτά θέματα
 _(ό,τι θες να θυμάσαι ή να συζητήσουμε αργότερα)_
