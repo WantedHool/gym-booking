@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Node / Angular / Nx
+node_modules/
+dist/
+.angular/
+.nx/cache/
+
+# Env & secrets
+.env
+*.env.local
+
+# IDE / OS
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
