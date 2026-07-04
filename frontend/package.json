@@ -2,7 +2,12 @@
   "name": "@frontend/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "start:customer": "nx serve customer",
+    "start:staff": "nx serve staff --port 4201",
+    "lint": "nx run-many -t lint",
+    "build": "nx run-many -t build"
+  },
   "private": true,
   "devDependencies": {
     "@analogjs/vite-plugin-angular": "~2.1.2",
