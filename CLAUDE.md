@@ -5,39 +5,41 @@
 ## Τι είναι
 Multi-tenant SaaS web app για διαχείριση κρατήσεων & προγραμμάτων γυμναστηρίου.
 Διπλός σκοπός: πτυχιακή + βάση για πραγματικό προϊόν.
-**Πλήρες spec (single source of truth):** [docs/specs/2026-06-28-gym-booking-design.md](docs/specs/2026-06-28-gym-booking-design.md)
+**Πλήρες spec (single source of truth):** [docs/2026-06-28-gym-booking-design.md](docs/2026-06-28-gym-booking-design.md) · **Implementation plan:** [docs/2026-06-28-implementation-plan.md](docs/2026-06-28-implementation-plan.md)
 
 ## Stack
-- **Frontend:** Angular monorepo (1 workspace) → `customer` app (mobile-first) + `staff` app (desktop-first) + shared libs. Material + Tailwind + Signals.
-- **Backend:** .NET Web API · EF Core · ASP.NET Core Identity + JWT · Serilog · Swagger.
+- **Frontend:** Angular 21 **Nx** monorepo (1 workspace) → `customer` app (mobile-first) + `staff` app (desktop-first) + shared libs. Material + Tailwind v4 + Signals.
+- **Backend:** .NET 10 Web API (layered) · EF Core · ASP.NET Core Identity + JWT · Serilog · Scalar (OpenAPI).
 - **DB:** PostgreSQL.
 - **Infra:** Docker (local-first) · Git/GitHub · GitHub Actions (CI/CD).
 
 ## Δομή repo
-_(συμπλήρωσε καθώς δημιουργείς φακέλους — βοηθάει να βρίσκω γρήγορα τα πράγματα)_
 ```
-/backend        — .NET solution (TODO)
-/frontend       — Angular workspace: apps/customer, apps/staff, libs/* (TODO)
-/docs/specs     — spec document ✅
-/docker         — docker-compose, Dockerfiles (TODO)
+/backend            — .NET 10 solution (GymBooking.slnx): src/{Api,Core,Data} + tests/GymBooking.Tests ✅
+/frontend           — Nx workspace: apps/{customer,staff} + libs/{models,data-access,auth,ui} ✅
+/docker             — docker-compose.yml (Postgres 16 + Papercut) ✅
+/docs               — spec + implementation plan ✅
+/.github/workflows  — ci.yml (build+lint· ανενεργό μέχρι να ανέβει σε GitHub)
+nuget.config        — pin σε nuget.org (παρακάμπτει το εταιρικό feed nuget.eurotel.gr)
 ```
+Import paths FE libs: `@frontend/{models,data-access,auth,ui}`. Module boundaries επιβάλλονται μέσω tags (scope/type) στο `eslint.config.mjs`.
 
 ## Εντολές (build / run / test)
-_(συμπλήρωσε μόλις υπάρχει κώδικας — αυτές τις τρέχω για verification)_
 ```
-# Backend
+# Local infra (πρώτα)
+docker compose -f docker/docker-compose.yml up -d   # Postgres + Papercut · UI: http://localhost:8080
+
+# Backend (από /backend)
 dotnet build
-dotnet test
-dotnet run --project ...
+dotnet run --project src/GymBooking.Api             # Scalar docs: /scalar/v1 · health: /health
+dotnet ef migrations add <Name> -p src/GymBooking.Data -s src/GymBooking.Api
+dotnet ef database update       -p src/GymBooking.Data -s src/GymBooking.Api
 
-# Frontend
+# Frontend (από /frontend · θέλει Node 20 → `nvm use 20`)
 npm ci
-npm run start:customer   # TODO
-npm run start:staff      # TODO
-npm test
-
-# Local infra
-docker compose up -d      # Postgres + Papercut
+npx nx serve customer            # mobile-first app
+npx nx serve staff               # desktop-first app
+npx nx run-many -t lint build    # ό,τι τρέχει το CI
 ```
 
 ## Βασικές συμβάσεις (περίληψη — πλήρη στο spec)
@@ -49,7 +51,7 @@ docker compose up -d      # Postgres + Papercut
 
 ## Πρόοδος (progress tracker)
 _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο chat ξέρει πού είσαι)_
-- [ ] Setup (monorepo, Postgres, EF, tenant infra)
+- [x] Setup (Nx monorepo, Postgres+Papercut, EF, backend layered, Serilog/Scalar/health) — _tenant infra μετακινήθηκε στη Φ1_
 - [ ] Φ1 — Auth + ρόλοι + invitation/registration
 - [ ] Φ2 — ClassType/ClassSession CRUD + instructor
 - [ ] Φ3 — Booking core (atomic) + tests
@@ -59,8 +61,10 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [ ] Φ7 — Admin/staff dashboard + responsive QA
 - [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
 
-**Τώρα δουλεύω:** _(γράψε εδώ τι κάνεις αυτή τη στιγμή)_
+**Τώρα δουλεύω:** Setup ✅ (2026-07-04, 9 commits). Επόμενο: **Φάση 1 (Auth)** — προς συζήτηση scope/λεπτομερειών πριν την έναρξη.
 
 ## Σημειώσεις / ανοιχτά θέματα
 _(ό,τι θες να θυμάσαι ή να συζητήσουμε αργότερα)_
-- Git 2 accounts (προσωπικό/δουλειά) στο ίδιο PC: [docs/notes/git-multi-account-setup.md](docs/notes/git-multi-account-setup.md)
+- **Git:** local identity = προσωπικό (`Xrhstos Rimpas <christarasrib@gmail.com>`)· το global εργασιακό (`chrimpas@eurotel.gr`) μένει ανέπαφο. GitHub repo (push + CI activation + branch protection) = επόμενη φάση, το κάνει ο χρήστης.
+- **NuGet gotcha:** εταιρικό feed `nuget.eurotel.gr` (401) → λύθηκε με `nuget.config` (`<clear/>` + nuget.org).
+- **Deprecation:** ο `@nx/eslint:lint` executor θα καταργηθεί στο Nx v24 (migration `convert-to-inferred` σε hardening).
