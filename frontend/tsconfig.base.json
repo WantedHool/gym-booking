@@ -13,7 +13,12 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "paths": {}
+    "paths": {
+      "@frontend/models": ["./libs/models/src/index.ts"],
+      "@frontend/data-access": ["./libs/data-access/src/index.ts"],
+      "@frontend/auth": ["./libs/auth/src/index.ts"],
+      "@frontend/ui": ["./libs/ui/src/index.ts"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }
