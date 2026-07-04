@@ -211,6 +211,12 @@ builder.Services.AddDbContext<AppDbContext>(o =>
   - **Resource ownership** ("ακυρώνεις μόνο τη δική σου κράτηση") = ρητός έλεγχος στο **service layer** (`entity.UserId == currentUserId`), **όχι** custom `AuthorizationHandler` ακόμα.
   - **Tenant isolation** = EF global query filters + tenant middleware (ορθογώνιο, όχι authorization policy).
   - **Αναβάθμιση** σε custom requirements/handlers μόνο αν εμφανιστεί κανόνας πέρα από «ρόλος + ownership» (granular permissions, gating βάσει subscription status, feature flags).
+- **Invitation & registration flow = ενιαίος μηχανισμός για όλους** _(2026-07-04)_:
+  - **Invite-only**, κανένα self-signup. Ο **Admin** είναι seeded (Task 14), όχι invited.
+  - Ο user **δεν** δημιουργείται στο invite — μόνο **Invitation** record. Δημιουργείται **Active** στην εγγραφή.
+  - **Ενιαία πρόσκληση** και για members (role=User) και για instructors (role=Instructor) μέσω του ίδιου `POST /invitations`. **Μία role-agnostic register σελίδα** για όλους· ο ρόλος καθορίζει μόνο σε ποιο app γίνεται login μετά (User→customer, Instructor→staff). Κανείς δεν χειρίζεται passwords χειροκίνητα.
+  - Register πεδία: **password + FirstName/LastName** (προστίθενται στον `ApplicationUser`).
+  - Token: τυχαίο 32 bytes, αποθηκευμένο **hashed**, **7 μέρες** λήξη, **μιας χρήσης**· raw token μόνο στο email link. Dev email → Papercut. Μετά την εγγραφή → redirect σε login.
 
 ### Task 10: Base entities + Identity
 
