@@ -25,6 +25,7 @@
     "@oxc-project/runtime": "^0.115.0",
     "@schematics/angular": "~21.2.0",
     "@swc/helpers": "~0.5.18",
+    "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^22.0.0",
     "@typescript-eslint/utils": "^8.40.0",
     "@vitest/coverage-v8": "~4.1.0",
@@ -34,7 +35,9 @@
     "eslint-config-prettier": "^10.0.0",
     "jsdom": "^27.1.0",
     "nx": "23.0.1",
+    "postcss": "^8.5.16",
     "prettier": "~3.6.2",
+    "tailwindcss": "^4.3.2",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
@@ -42,10 +45,12 @@
     "vitest": "^4.0.8"
   },
   "dependencies": {
+    "@angular/cdk": "^21.2.14",
     "@angular/common": "~21.2.0",
     "@angular/compiler": "~21.2.0",
     "@angular/core": "~21.2.0",
     "@angular/forms": "~21.2.0",
+    "@angular/material": "^21.2.14",
     "@angular/platform-browser": "~21.2.0",
     "@angular/router": "~21.2.0",
     "rxjs": "~7.8.0"

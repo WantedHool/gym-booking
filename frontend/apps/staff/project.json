@@ -21,7 +21,7 @@
             "input": "apps/staff/public"
           }
         ],
-        "styles": ["apps/staff/src/styles.scss"]
+        "styles": ["apps/staff/src/styles.scss", "apps/staff/src/tailwind.css"]
       },
       "configurations": {
         "production": {

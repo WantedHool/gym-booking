@@ -24,7 +24,8 @@
           }
         ],
         "styles": [
-          "apps/customer/src/styles.scss"
+          "apps/customer/src/styles.scss",
+          "apps/customer/src/tailwind.css"
         ]
       },
       "configurations": {
