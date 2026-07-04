@@ -1,0 +1,13 @@
+# Normalize line endings: store as LF in the repo, checkout as LF.
+# Keeps history clean and CI (Linux) consistent with local Windows.
+* text=auto eol=lf
+
+# Explicit binaries (never touch their bytes)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
