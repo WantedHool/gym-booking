@@ -217,6 +217,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
   - **Ενιαία πρόσκληση** και για members (role=User) και για instructors (role=Instructor) μέσω του ίδιου `POST /invitations`. **Μία role-agnostic register σελίδα** για όλους· ο ρόλος καθορίζει μόνο σε ποιο app γίνεται login μετά (User→customer, Instructor→staff). Κανείς δεν χειρίζεται passwords χειροκίνητα.
   - Register πεδία: **password + FirstName/LastName** (προστίθενται στον `ApplicationUser`).
   - Token: τυχαίο 32 bytes, αποθηκευμένο **hashed**, **7 μέρες** λήξη, **μιας χρήσης**· raw token μόνο στο email link. Dev email → Papercut. Μετά την εγγραφή → redirect σε login.
+- **Seed values** _(2026-07-04)_: Tenant `Demo Gym` / slug `demo-gym` / CancellationHours `24`· Admin `admin@demo.gym` / `Admin123!`· ρόλοι User/Instructor/Admin. Τιμές σε **`appsettings.Development.json` → `Seed`** (όχι hardcoded), τρέχει μόνο σε άδεια βάση. Identity default password policy. Πραγματικό branding (όνομα/logo) = μελλοντικό cosmetic πέρασμα.
 
 ### Task 10: Base entities + Identity
 
