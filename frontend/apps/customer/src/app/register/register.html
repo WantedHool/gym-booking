@@ -1,0 +1,34 @@
+<div class="min-h-screen flex items-center justify-center p-4">
+  @if (invalidLink) {
+    <p class="text-sm text-red-600">Μη έγκυρο link εγγραφής.</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
+      <h1 class="text-xl font-medium text-center">Ολοκλήρωση εγγραφής</h1>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Όνομα</mat-label>
+        <input matInput formControlName="firstName" autocomplete="given-name" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Επώνυμο</mat-label>
+        <input matInput formControlName="lastName" autocomplete="family-name" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>Κωδικός</mat-label>
+        <input matInput type="password" formControlName="password" autocomplete="new-password" />
+        <mat-hint>Τουλάχιστον 6 χαρακτήρες, ένα κεφαλαίο, ένα πεζό, έναν αριθμό και έναν ειδικό χαρακτήρα.</mat-hint>
+        <mat-error>Λάθος format κωδικού — δες τις απαιτήσεις παραπάνω.</mat-error>
+      </mat-form-field>
+
+      @if (errorMessage(); as message) {
+        <p class="text-sm text-red-600">{{ message }}</p>
+      }
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="submitting()" class="w-full">
+        {{ submitting() ? 'Υποβολή...' : 'Δημιουργία λογαριασμού' }}
+      </button>
+    </form>
+  }
+</div>
