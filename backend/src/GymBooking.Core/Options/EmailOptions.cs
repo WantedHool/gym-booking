@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Email;
+namespace GymBooking.Core.Options;
 
 public class EmailOptions
 {

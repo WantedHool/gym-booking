@@ -1,6 +1,6 @@
 using GymBooking.Core.Multitenancy;
 
-namespace GymBooking.Api.Multitenancy;
+namespace GymBooking.Api.Services;
 
 public class CurrentTenant : ICurrentTenant
 {

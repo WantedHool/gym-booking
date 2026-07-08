@@ -1,8 +1,10 @@
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
 using GymBooking.Core.Entities.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace GymBooking.Api.Invitations;
+namespace GymBooking.Api.Controllers;
 
 [ApiController]
 [Route("invitations")]
@@ -29,5 +31,3 @@ public class InvitationsController : ControllerBase
         return NoContent();
     }
 }
-
-public record CreateInvitationRequest(string Email, string Role);

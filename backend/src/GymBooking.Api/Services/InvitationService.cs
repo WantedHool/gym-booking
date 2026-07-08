@@ -1,12 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
-using GymBooking.Api.Email;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
+using GymBooking.Core.Options;
 using GymBooking.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace GymBooking.Api.Invitations;
+namespace GymBooking.Api.Services;
 
 public class InvitationService
 {

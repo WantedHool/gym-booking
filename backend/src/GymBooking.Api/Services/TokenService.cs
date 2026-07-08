@@ -2,9 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Options;
 using Microsoft.IdentityModel.Tokens;
 
-namespace GymBooking.Api.Auth;
+namespace GymBooking.Api.Services;
 
 public class TokenService
 {

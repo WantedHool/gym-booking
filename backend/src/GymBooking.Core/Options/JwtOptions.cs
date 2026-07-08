@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Auth;
+namespace GymBooking.Core.Options;
 
 public class JwtOptions
 {

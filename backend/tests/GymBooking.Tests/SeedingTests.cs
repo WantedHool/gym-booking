@@ -1,4 +1,4 @@
-using GymBooking.Api.Seeding;
+using GymBooking.Api.Services;
 using GymBooking.Core.Entities.Constants;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Data;

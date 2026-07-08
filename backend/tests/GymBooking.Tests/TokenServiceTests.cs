@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
-using GymBooking.Api.Auth;
+using GymBooking.Api.Services;
 using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Options;
 
 namespace GymBooking.Tests;
 

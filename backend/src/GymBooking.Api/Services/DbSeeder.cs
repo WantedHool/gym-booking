@@ -1,10 +1,11 @@
 using GymBooking.Core.Entities.Constants;
 using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Options;
 using GymBooking.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace GymBooking.Api.Seeding;
+namespace GymBooking.Api.Services;
 
 public class DbSeeder
 {

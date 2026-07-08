@@ -1,12 +1,12 @@
-using GymBooking.Api.Invitations;
-using GymBooking.Api.Multitenancy;
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
 using GymBooking.Core.Entities.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace GymBooking.Api.Auth;
+namespace GymBooking.Api.Controllers;
 
 [ApiController]
 [Route("auth")]
@@ -137,9 +137,3 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 }
-
-public record LoginRequest(string Email, string Password);
-
-public record LoginResponse(string AccessToken);
-
-public record RegisterRequest(string Password, string FirstName, string LastName);

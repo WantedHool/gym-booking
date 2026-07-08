@@ -1,4 +1,4 @@
-using GymBooking.Api.Email;
+using GymBooking.Api.Services;
 
 namespace GymBooking.Tests;
 

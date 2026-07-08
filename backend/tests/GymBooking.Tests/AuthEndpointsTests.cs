@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using GymBooking.Api.Auth;
+using GymBooking.Core.Contracts;
 using GymBooking.Core.Entities.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;

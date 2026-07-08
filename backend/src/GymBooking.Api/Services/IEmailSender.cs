@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Email;
+namespace GymBooking.Api.Services;
 
 public interface IEmailSender
 {

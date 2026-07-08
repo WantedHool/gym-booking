@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Multitenancy;
+namespace GymBooking.Api.Services;
 
 public class TenantMiddleware
 {

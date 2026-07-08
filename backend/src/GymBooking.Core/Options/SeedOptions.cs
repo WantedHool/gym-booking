@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Seeding;
+namespace GymBooking.Core.Options;
 
 public class SeedOptions
 {

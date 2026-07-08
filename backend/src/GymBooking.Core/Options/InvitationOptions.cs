@@ -1,4 +1,4 @@
-namespace GymBooking.Api.Invitations;
+namespace GymBooking.Core.Options;
 
 public class InvitationOptions
 {

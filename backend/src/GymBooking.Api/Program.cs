@@ -1,11 +1,8 @@
 using System.Text;
-using GymBooking.Api.Auth;
-using GymBooking.Api.Email;
-using GymBooking.Api.Invitations;
-using GymBooking.Api.Multitenancy;
-using GymBooking.Api.Seeding;
+using GymBooking.Api.Services;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
+using GymBooking.Core.Options;
 using GymBooking.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
