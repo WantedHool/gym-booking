@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using GymBooking.Api.Interfaces;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
 using GymBooking.Core.Options;

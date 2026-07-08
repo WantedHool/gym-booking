@@ -1,4 +1,4 @@
-using GymBooking.Api.Services;
+using GymBooking.Api.Interfaces;
 
 namespace GymBooking.Tests;
 

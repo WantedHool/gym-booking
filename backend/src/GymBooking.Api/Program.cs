@@ -1,5 +1,7 @@
 using System.Text;
+using GymBooking.Api.Interfaces;
 using GymBooking.Api.Services;
+using GymBooking.Api.Utilities;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
 using GymBooking.Core.Options;

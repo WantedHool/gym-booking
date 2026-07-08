@@ -1,3 +1,5 @@
+using GymBooking.Core.Multitenancy;
+
 namespace GymBooking.Api.Services;
 
 public class TenantMiddleware

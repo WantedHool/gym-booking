@@ -1,4 +1,4 @@
-using GymBooking.Api.Services;
+using GymBooking.Api.Interfaces;
 using GymBooking.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

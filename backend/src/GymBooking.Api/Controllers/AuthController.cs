@@ -1,6 +1,7 @@
 using GymBooking.Api.Services;
 using GymBooking.Core.Contracts;
 using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;

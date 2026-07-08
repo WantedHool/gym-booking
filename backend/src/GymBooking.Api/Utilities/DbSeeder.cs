@@ -5,7 +5,7 @@ using GymBooking.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace GymBooking.Api.Services;
+namespace GymBooking.Api.Utilities;
 
 public class DbSeeder
 {

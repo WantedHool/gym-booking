@@ -1,7 +1,8 @@
 using System.Net.Mail;
+using GymBooking.Api.Interfaces;
 using GymBooking.Core.Options;
 
-namespace GymBooking.Api.Services;
+namespace GymBooking.Api.Utilities;
 
 // Dev-only: στέλνει μέσω SMTP στο τοπικό Papercut (docker/docker-compose.yml) — τα emails
 // φαίνονται στο http://localhost:8080, δεν φεύγουν πραγματικά πουθενά.
