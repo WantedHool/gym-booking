@@ -3,6 +3,7 @@ using GymBooking.Api.Auth;
 using GymBooking.Api.Email;
 using GymBooking.Api.Invitations;
 using GymBooking.Api.Multitenancy;
+using GymBooking.Api.Seeding;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
 using GymBooking.Data;
@@ -87,11 +88,24 @@ var invitationOptions = builder.Configuration.GetSection("Invitations").Get<Invi
 builder.Services.AddSingleton(invitationOptions);
 builder.Services.AddScoped<InvitationService>();
 
+// Seed: 1 tenant + roles + 1 admin, μόνο σε άδεια βάση (βλ. κλήση seeder.SeedAsync() παρακάτω).
+var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()
+    ?? throw new InvalidOperationException("Missing 'Seed' configuration section.");
+builder.Services.AddSingleton(seedOptions);
+builder.Services.AddScoped<DbSeeder>();
+
 // Health checks: ελέγχει και τη σύνδεση με τη βάση μέσω του AppDbContext
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
 
 var app = builder.Build();
+
+// Seed: τρέχει μόνο σε άδεια βάση (βλ. DbSeeder.SeedAsync).
+using (var seedScope = app.Services.CreateScope())
+{
+    var seeder = seedScope.ServiceProvider.GetRequiredService<DbSeeder>();
+    await seeder.SeedAsync();
+}
 
 // Serilog request logging (ένα δομημένο log ανά HTTP request)
 app.UseSerilogRequestLogging();
