@@ -24,6 +24,21 @@ builder.Services.AddControllers();
 // OpenAPI spec (built-in) — το διαδραστικό UI το σερβίρει το Scalar παρακάτω
 builder.Services.AddOpenApi();
 
+// CORS (dev only): τα Angular apps (customer:4200, staff:4201) τρέχουν σε δικό τους dev server
+// origin, άρα το browser τα θεωρεί cross-origin. Bearer token στο header, όχι cookies — δεν
+// χρειάζεται AllowCredentials.
+const string DevCorsPolicy = "DevCors";
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy(DevCorsPolicy, policy =>
+            policy.WithOrigins("http://localhost:4200", "http://localhost:4201")
+                .AllowAnyHeader()
+                .AllowAnyMethod());
+    });
+}
+
 // Tenant context: CurrentTenant + ICurrentTenant πρέπει να resolve στο ΙΔΙΟ scoped instance
 // (ICurrentTenant το διαβάζει ο AppDbContext, CurrentTenant.SetTenant το γεμίζει το middleware).
 builder.Services.AddScoped<CurrentTenant>();
@@ -121,6 +136,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(DevCorsPolicy);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

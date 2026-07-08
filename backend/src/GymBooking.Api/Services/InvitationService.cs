@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using GymBooking.Api.Interfaces;
+using GymBooking.Core.Entities.Constants;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
 using GymBooking.Core.Options;
@@ -48,7 +49,16 @@ public class InvitationService
         await _dbContext.SaveChangesAsync();
 
         var registerLink = $"{_options.RegisterUrlBase}?token={rawToken}";
-        await _emailSender.SendAsync(email, "Πρόσκληση εγγραφής", $"Κάνε εγγραφή εδώ: {registerLink}");
+        var roleLabel = role switch
+        {
+            Roles.User => "μέλος (πελάτης)",
+            Roles.Instructor => "προπονητής/τρια",
+            _ => role,
+        };
+        await _emailSender.SendAsync(
+            email,
+            "Πρόσκληση εγγραφής",
+            $"Προσκλήθηκες να εγγραφείς ως {roleLabel} στο Demo Gym. Κάνε εγγραφή εδώ: {registerLink}");
     }
 
     public async Task<Invitation?> ValidateTokenAsync(string rawToken)
