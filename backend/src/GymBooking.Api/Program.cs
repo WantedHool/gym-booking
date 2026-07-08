@@ -36,7 +36,11 @@ builder.Services.AddScoped<ICurrentTenant>(sp => sp.GetRequiredService<CurrentTe
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+        options.UseNpgsql(
+            builder.Configuration.GetConnectionString("Default"),
+            // Retry σε παροδικά connection failures — π.χ. αν το API ξεκινήσει λίγο πριν προλάβει
+            // να είναι πλήρως έτοιμη η Postgres (docker compose healthcheck ~ έως 50s).
+            npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 }
 
 // ASP.NET Core Identity: user/role management, password hashing, sign-in checks.

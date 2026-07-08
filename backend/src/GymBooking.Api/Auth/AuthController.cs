@@ -110,7 +110,28 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors.Select(e => e.Description));
         }
 
-        await _userManager.AddToRoleAsync(user, invitation.Role);
+        // Αν αποτύχει ο role assignment (π.χ. ο ρόλος δεν υπάρχει), διαγράφουμε τον μόλις
+        // δημιουργημένο χρήστη — αλλιώς το invitation θα έμενε unused αλλά το email θα ήταν ήδη
+        // "πιασμένο", και ένα retry του invitee θα κολλούσε μόνιμα σε duplicate-username 400.
+        IdentityResult roleResult;
+        try
+        {
+            roleResult = await _userManager.AddToRoleAsync(user, invitation.Role);
+        }
+        catch (InvalidOperationException)
+        {
+            roleResult = IdentityResult.Failed(new IdentityError
+            {
+                Description = $"Role '{invitation.Role}' does not exist.",
+            });
+        }
+
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
+            return BadRequest(roleResult.Errors.Select(e => e.Description));
+        }
+
         await _invitationService.MarkUsedAsync(invitation);
 
         return NoContent();

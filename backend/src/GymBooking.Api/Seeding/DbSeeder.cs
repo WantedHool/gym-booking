@@ -66,13 +66,26 @@ public class DbSeeder
             EmailConfirmed = true,
         };
 
+        // Αν κάτι παρακάτω αποτύχει, διαγράφουμε το Tenant — αλλιώς το Tenants.AnyAsync() guard
+        // παραπάνω θα θεωρούσε τη βάση "ήδη σπαρμένη" σε κάθε επόμενο restart, χωρίς ποτέ να
+        // υπάρχει πραγματικός admin (μόνιμο, μη ανακτήσιμο dead-end χωρίς αυτό).
         var result = await _userManager.CreateAsync(admin, _options.AdminPassword);
         if (!result.Succeeded)
         {
+            _dbContext.Tenants.Remove(tenant);
+            await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException(
                 "Seeding admin user failed: " + string.Join(", ", result.Errors.Select(e => e.Description)));
         }
 
-        await _userManager.AddToRoleAsync(admin, Roles.Admin);
+        var roleResult = await _userManager.AddToRoleAsync(admin, Roles.Admin);
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(admin);
+            _dbContext.Tenants.Remove(tenant);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                "Seeding admin role assignment failed: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+        }
     }
 }
