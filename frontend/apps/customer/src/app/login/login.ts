@@ -40,6 +40,9 @@ export class Login {
       error: () => {
         this.submitting.set(false);
         this.errorMessage.set('Λάθος email ή κωδικός.');
+        this.form.controls.email.setErrors({ invalidCredentials: true });
+        this.form.controls.password.setErrors({ invalidCredentials: true });
+        this.form.markAllAsTouched();
       },
     });
   }
