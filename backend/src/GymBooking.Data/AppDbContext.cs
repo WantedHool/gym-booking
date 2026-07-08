@@ -1,15 +1,31 @@
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace GymBooking.Data;
 
 /// <summary>
-/// Η κεντρική "πύλη" προς τη βάση. Τα DbSets (πίνακες) και τα entity
-/// configurations προστίθενται στη Φάση 1 (base entities + multi-tenancy).
+/// Η κεντρική "πύλη" προς τη βάση. Identity (users/roles) + tenant-owned entities.
 /// </summary>
-public class AppDbContext : DbContext
+public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options)
+    private readonly ICurrentTenant _currentTenant;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ICurrentTenant currentTenant)
         : base(options)
     {
+        _currentTenant = currentTenant;
+    }
+
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+    public DbSet<Invitation> Invitations => Set<Invitation>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<ApplicationUser>().HasQueryFilter(u => u.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<Invitation>().HasQueryFilter(i => i.TenantId == _currentTenant.TenantId);
     }
 }

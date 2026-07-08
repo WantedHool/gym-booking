@@ -1,3 +1,5 @@
+using GymBooking.Api.Multitenancy;
+using GymBooking.Core.Multitenancy;
 using GymBooking.Data;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -13,6 +15,11 @@ builder.Services.AddControllers();
 
 // OpenAPI spec (built-in) — το διαδραστικό UI το σερβίρει το Scalar παρακάτω
 builder.Services.AddOpenApi();
+
+// Tenant context: CurrentTenant + ICurrentTenant πρέπει να resolve στο ΙΔΙΟ scoped instance
+// (ICurrentTenant το διαβάζει ο AppDbContext, CurrentTenant.SetTenant το γεμίζει το middleware).
+builder.Services.AddScoped<CurrentTenant>();
+builder.Services.AddScoped<ICurrentTenant>(sp => sp.GetRequiredService<CurrentTenant>());
 
 // EF Core + PostgreSQL (connection string από appsettings)
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -37,6 +44,10 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+// Γεμίζει το CurrentTenant από το JWT claim "tenantId". Μέχρι το Task 12 (JwtBearer +
+// UseAuthentication) δεν υπάρχει authenticated user, άρα δεν κάνει τίποτα ακόμα — έτοιμο καλώδιο.
+app.UseMiddleware<TenantMiddleware>();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
