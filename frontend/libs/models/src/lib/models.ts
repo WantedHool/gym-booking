@@ -70,3 +70,8 @@ export interface Booking {
 export interface CreateBookingRequest {
   classSessionId: string;
 }
+
+export interface CreateInvitationRequest {
+  email: string;
+  role: 'User' | 'Instructor';
+}

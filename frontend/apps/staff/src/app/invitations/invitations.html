@@ -1,0 +1,27 @@
+<h1 class="text-2xl font-bold text-white mb-4">Προσκλήσεις</h1>
+
+<form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4 max-w-md">
+  <mat-form-field appearance="outline">
+    <mat-label>Email</mat-label>
+    <input matInput type="email" formControlName="email" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Ρόλος</mat-label>
+    <mat-select formControlName="role">
+      <mat-option value="User">Μέλος (πελάτης)</mat-option>
+      <mat-option value="Instructor">Προπονητής/τρια</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  @if (errorMessage(); as message) {
+    <p class="text-sm text-red-400">{{ message }}</p>
+  }
+  @if (successMessage(); as message) {
+    <p class="text-sm text-green-400">{{ message }}</p>
+  }
+
+  <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+    Αποστολή πρόσκλησης
+  </button>
+</form>

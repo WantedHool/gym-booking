@@ -2,6 +2,7 @@ import { Route } from '@angular/router';
 import { authGuard, roleGuard } from '@frontend/auth';
 import { ClassTypes } from './class-types/class-types';
 import { Dashboard } from './dashboard/dashboard';
+import { Invitations } from './invitations/invitations';
 import { Login } from './login/login';
 import { Register } from './register/register';
 import { Sessions } from './sessions/sessions';
@@ -18,6 +19,7 @@ export const appRoutes: Route[] = [
       { path: 'dashboard', component: Dashboard },
       { path: 'class-types', component: ClassTypes, canActivate: [roleGuard('Instructor', 'Admin')] },
       { path: 'sessions', component: Sessions, canActivate: [roleGuard('Instructor', 'Admin')] },
+      { path: 'invitations', component: Invitations, canActivate: [roleGuard('Admin')] },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
     ],
   },

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -34,6 +34,8 @@ export class StaffShell {
     this.breakpointObserver.observe('(max-width: 767px)').pipe(map((state) => state.matches)),
     { initialValue: false },
   );
+
+  protected readonly isAdmin = computed(() => this.authService.hasRole('Admin'));
 
   logout(): void {
     this.authService.logout();
