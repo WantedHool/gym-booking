@@ -18,3 +18,42 @@ export interface RegisterRequest {
   firstName: string;
   lastName: string;
 }
+
+export interface ClassType {
+  id: string;
+  name: string;
+  description: string;
+  defaultDurationMinutes: number;
+  defaultCapacity: number;
+  isActive: boolean;
+}
+
+export interface CreateClassTypeRequest {
+  name: string;
+  description: string;
+  defaultDurationMinutes: number;
+  defaultCapacity: number;
+}
+
+export type UpdateClassTypeRequest = CreateClassTypeRequest;
+
+export interface ClassSession {
+  id: string;
+  classTypeId: string;
+  classTypeName: string;
+  instructorId: string;
+  instructorName: string;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+  capacity: number;
+  bookedCount: number;
+  isCancelled: boolean;
+}
+
+export interface CreateClassSessionRequest {
+  classTypeId: string;
+  instructorId?: string | null;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+  capacity: number;
+}

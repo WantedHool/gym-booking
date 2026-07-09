@@ -25,12 +25,16 @@ public class InvitationService
         _options = options;
     }
 
-    public static string GenerateRawToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    public static string GenerateRawToken()
+    {
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+    }
 
-    public static string HashToken(string rawToken) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
+    public static string HashToken(string rawToken)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
+    }
 
     public async Task CreateAsync(string email, string role)
     {

@@ -1,12 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '@frontend/auth';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [MatButtonModule],
+  imports: [MatButtonModule, RouterLink],
   templateUrl: './dashboard.html',
 })
 export class Dashboard {

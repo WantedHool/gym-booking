@@ -2,6 +2,7 @@ using System.Text;
 using GymBooking.Api.Interfaces;
 using GymBooking.Api.Services;
 using GymBooking.Api.Utilities;
+using GymBooking.Core.Entities.Constants;
 using GymBooking.Core.Entities.Models;
 using GymBooking.Core.Multitenancy;
 using GymBooking.Core.Options;
@@ -93,7 +94,12 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // RequireInstructor = Instructor Ή Admin (ο Admin μπορεί ό,τι κι ο instructor).
+    options.AddPolicy(Policies.RequireAdmin, policy => policy.RequireRole(Roles.Admin));
+    options.AddPolicy(Policies.RequireInstructor, policy => policy.RequireRole(Roles.Instructor, Roles.Admin));
+});
 
 // Email (dev: SmtpEmailSender → Papercut) + Invitations
 var emailOptions = builder.Configuration.GetSection("Email").Get<EmailOptions>()
@@ -105,6 +111,8 @@ var invitationOptions = builder.Configuration.GetSection("Invitations").Get<Invi
     ?? throw new InvalidOperationException("Missing 'Invitations' configuration section.");
 builder.Services.AddSingleton(invitationOptions);
 builder.Services.AddScoped<InvitationService>();
+builder.Services.AddScoped<ClassTypeService>();
+builder.Services.AddScoped<ClassSessionService>();
 
 // Seed: 1 tenant + roles + 1 admin, μόνο σε άδεια βάση (βλ. κλήση seeder.SeedAsync() παρακάτω).
 var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()

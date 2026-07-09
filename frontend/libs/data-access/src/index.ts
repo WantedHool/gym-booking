@@ -1,1 +1,3 @@
 export * from './lib/auth-api.service';
+export * from './lib/class-type-api.service';
+export * from './lib/class-session-api.service';

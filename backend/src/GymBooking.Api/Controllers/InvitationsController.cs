@@ -18,7 +18,7 @@ public class InvitationsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = Policies.RequireAdmin)]
     public async Task<IActionResult> Create([FromBody] CreateInvitationRequest request)
     {
         if (request.Role != Roles.User && request.Role != Roles.Instructor)

@@ -7,13 +7,16 @@ namespace GymBooking.Tests;
 
 public class TokenServiceTests
 {
-    private static TokenService CreateService() => new(new JwtOptions
+    private static TokenService CreateService()
     {
-        Issuer = "GymBooking.Tests",
-        Audience = "GymBooking.Tests",
-        SigningKey = "unit-test-signing-key-1f8a6c2e9b4d7f01a3c5e8b2d4f60719",
-        AccessTokenExpiryMinutes = 120,
-    });
+        return new TokenService(new JwtOptions
+        {
+            Issuer = "GymBooking.Tests",
+            Audience = "GymBooking.Tests",
+            SigningKey = "unit-test-signing-key-1f8a6c2e9b4d7f01a3c5e8b2d4f60719",
+            AccessTokenExpiryMinutes = 120,
+        });
+    }
 
     [Fact]
     public void CreateAccessToken_includes_sub_tenantId_and_role_claims()

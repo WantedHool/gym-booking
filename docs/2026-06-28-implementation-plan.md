@@ -1419,30 +1419,2890 @@ Expected: όλα PASS.
 
 ---
 
-## PHASE 3–8: Outline (επέκταση σε αναλυτικά tasks όταν φτάνουμε)
+## PHASE 3: 🔥 Booking core (atomic) + tests (~14h)
+
+> Η κρίσιμη φάση. TDD παντού. **Το atomic booking απαιτεί πραγματική PostgreSQL** (transactions + row locks) — το EF InMemory δεν αρκεί, άρα εισάγουμε **Testcontainers** ως νέο test harness (παράλληλα με το υπάρχον InMemory `TestApiFactory` που μένει για τα Φ1/Φ2 tests). Ακολουθεί τα Φ1/Φ2 patterns: flat entities, query filters ανά tenant, services στο `GymBooking.Api/Services`, contracts (records) στο `GymBooking.Core/Contracts`.
+
+### Αποφάσεις Φάσης 3 (κλειδωμένες)
+- **Test infra = Testcontainers (πραγματική Postgres 16)** _(2026-07-09)_. Νέο `PostgresApiFactory` που σηκώνει container, εφαρμόζει migrations, δίνει real DbContext. Απαραίτητο: το `SELECT … FOR UPDATE` και τα transactions δεν υπάρχουν στο InMemory. Το CI έχει Docker.
+- **Locking = pessimistic `SELECT … FOR UPDATE`** _(2026-07-09)_ μέσα σε transaction, με `FromSqlInterpolated` (parameterized — no SQL injection) + `IgnoreQueryFilters()` + **ρητό `TenantId` στο SQL**. Το `IgnoreQueryFilters` είναι κρίσιμο: αλλιώς το EF τυλίγει το `FOR UPDATE` σε subquery (invalid στην Postgres). Το `BookedCount` αλλάζει **σε ένα μόνο σημείο** (`BookingService`) — εκεί θα μπει η γραμμή SignalR σε μελλοντική φάση.
+- **Anti-double-booking = ίδιο session + overlapping χρόνος** _(2026-07-09)_. Ο overlap έλεγχος γίνεται σε C# (in-memory) πάνω στα confirmed sessions του χρήστη — ο Npgsql δεν μεταφράζει `AddMinutes(column)` σε SQL.
+- **Booking = κάθε authenticated χρήστης** _(2026-07-09)_: απλό `[Authorize]` στον `BookingsController`. Χωρίς νέα policy (στην πράξη role=User κάνει κρατήσεις). Ownership («ακυρώνεις μόνο τη δική σου») = ρητός έλεγχος `booking.UserId == currentUserId` στο service layer (ίδιο σκεπτικό με την απόφαση Φ1).
+- **WaitlistEntry = αναβολή στη Φ6** _(2026-07-09)_. Εδώ **μόνο** `Booking`. Καμία subscription consumption (Φ5) και καμία cancellation-policy χρονικού ορίου (Φ6) — ο cancel της Φ3 επιστρέφει πάντα τη θέση.
+- **Session GET → ανοιχτό σε authenticated** _(2026-07-09)_: χαλαρώνουμε το `[Authorize(Policy=RequireInstructor)]` του `ClassSessionsController` ώστε τα **GET** να είναι προσβάσιμα σε κάθε συνδεδεμένο (ο customer πρέπει να βλέπει sessions για να κρατήσει)· τα **write** (POST/cancel) μένουν `RequireInstructor`.
+
+### Task 25: Booking entity + enums + DbContext + migration
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Entities/Enums/BookingStatus.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Enums/BookingOutcome.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Models/Booking.cs`
+- Modify: `backend/src/GymBooking.Data/AppDbContext.cs`
+- Test: `backend/tests/GymBooking.Tests/TenantIsolationTests.cs`
+
+- [ ] **Step 1:** `BookingStatus.cs`:
+
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum BookingStatus
+{
+    Confirmed,   // = 0
+    Cancelled,   // = 1
+}
+```
+
+- [ ] **Step 2:** `BookingOutcome.cs` (το επιστρέφει το service· ο controller το χαρτογραφεί σε HTTP):
+
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum BookingOutcome
+{
+    Success,
+    SessionNotFound,
+    SessionCancelled,
+    SessionFull,
+    AlreadyBooked,
+    TimeConflict,
+}
+```
+
+- [ ] **Step 3:** `Booking.cs` (flat entity):
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+
+namespace GymBooking.Core.Entities.Models;
+
+public class Booking
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid ClassSessionId { get; set; }
+    public BookingStatus Status { get; set; } = BookingStatus.Confirmed;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? CancelledAt { get; set; }
+}
+```
+
+- [ ] **Step 4:** Στο `AppDbContext.cs` πρόσθεσε DbSet + query filter + **partial unique index** (μία confirmed κράτηση ανά χρήστη/session· cancelled δεν μετράει, άρα επιτρέπεται re-book). Στο `OnModelCreating`, μετά τα υπάρχοντα:
+
+```csharp
+    public DbSet<Booking> Bookings => Set<Booking>();
+```
+
+```csharp
+        modelBuilder.Entity<Booking>().HasQueryFilter(b => b.TenantId == _currentTenant.TenantId);
+
+        // DB-level δικλείδα ασφαλείας ενάντια σε διπλή confirmed κράτηση (πέρα από τον έλεγχο στο service).
+        modelBuilder.Entity<Booking>()
+            .HasIndex(b => new { b.UserId, b.ClassSessionId })
+            .IsUnique()
+            .HasFilter("\"Status\" = 0");
+```
+
+- [ ] **Step 5 (test first):** Πρόσθεσε στο `TenantIsolationTests.cs` (ίδιο μοτίβο με τα υπάρχοντα):
+
+```csharp
+    [Fact]
+    public void Bookings_query_returns_only_current_tenant_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        using (var seedContext = CreateContext(dbName, new FakeCurrentTenant(tenantA)))
+        {
+            seedContext.Bookings.Add(new Booking
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantA,
+                UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(),
+                CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.Bookings.Add(new Booking
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantB,
+                UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(),
+                CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.SaveChanges();
+        }
+
+        using var queryContext = CreateContext(dbName, new FakeCurrentTenant(tenantA));
+        var results = queryContext.Bookings.ToList();
+
+        Assert.Single(results);
+        Assert.Equal(tenantA, results[0].TenantId);
+    }
+```
+Πρόσθεσε `using GymBooking.Core.Entities.Models;` αν λείπει. (Το InMemory αγνοεί το `HasFilter` — OK, το test ελέγχει μόνο το tenant query filter.)
+
+- [ ] **Step 6:** Τρέξε → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~TenantIsolationTests"`
+
+- [ ] **Step 7:** Migration + apply (DB up: `docker compose -f docker/docker-compose.yml up -d`):
+
+```bash
+cd backend
+dotnet ef migrations add AddBookings -p src/GymBooking.Data -s src/GymBooking.Api
+dotnet ef database update -p src/GymBooking.Data -s src/GymBooking.Api
+```
+Expected: πίνακας `Bookings` + partial unique index στο Postgres.
+
+- [ ] **Step 8: Commit** `git add -A && git commit -m "feat: add Booking entity + partial unique index + tenant isolation"`
+
+### Task 26: Testcontainers test harness (PostgresApiFactory)
+
+**Files:**
+- Modify: `backend/tests/GymBooking.Tests/GymBooking.Tests.csproj`
+- Create: `backend/tests/GymBooking.Tests/PostgresApiFactory.cs`
+- Create: `backend/tests/GymBooking.Tests/PostgresCollection.cs`
+- Test: `backend/tests/GymBooking.Tests/PostgresHarnessSmokeTests.cs`
+
+- [ ] **Step 1:** Πρόσθεσε το package (και άφησε το InMemory — χρησιμοποιείται ακόμα):
+
+```bash
+cd backend
+dotnet add tests/GymBooking.Tests package Testcontainers.PostgreSql
+```
+
+- [ ] **Step 2:** `PostgresApiFactory.cs`. Σηκώνει container, τρέχει τα migrations **πριν** χτιστεί ο host (αλλιώς ο seeder του `Program.cs` σκάει σε ανύπαρκτους πίνακες), και καταχωρεί Npgsql DbContext (το `Program.cs` παραλείπει το δικό του σε env `Testing`):
+
+```csharp
+using GymBooking.Api.Interfaces;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Testcontainers.PostgreSql;
+
+namespace GymBooking.Tests;
+
+public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    public async Task InitializeAsync()
+    {
+        await _db.StartAsync();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(_db.GetConnectionString())
+            .Options;
+        await using var ctx = new AppDbContext(options, new NoTenant());
+        await ctx.Database.MigrateAsync();
+    }
+
+    public new async Task DisposeAsync()
+    {
+        await _db.DisposeAsync();
+        await base.DisposeAsync();
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+        builder.ConfigureServices(services =>
+        {
+            services.AddDbContext<AppDbContext>(o => o.UseNpgsql(_db.GetConnectionString()));
+
+            // Χωρίς πραγματικό SMTP στα tests.
+            services.AddSingleton<FakeEmailSender>();
+            services.AddSingleton<IEmailSender>(sp => sp.GetRequiredService<FakeEmailSender>());
+        });
+    }
+
+    private sealed class NoTenant : ICurrentTenant
+    {
+        public Guid TenantId => Guid.Empty;
+    }
+}
+```
+
+- [ ] **Step 3:** `PostgresCollection.cs` — μοιράζεται **ένα** container σε όλα τα Postgres test classes (γρήγορο):
+
+```csharp
+namespace GymBooking.Tests;
+
+[CollectionDefinition("Postgres")]
+public class PostgresCollection : ICollectionFixture<PostgresApiFactory>
+{
+}
+```
+
+- [ ] **Step 4 (smoke test):** `PostgresHarnessSmokeTests.cs` — αποδεικνύει ότι ο host σηκώνεται πάνω σε πραγματική Postgres (ο seeder έτρεξε → ο admin μπορεί να κάνει login):
+
+```csharp
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class PostgresHarnessSmokeTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public PostgresHarnessSmokeTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task Seeded_admin_can_login_against_real_postgres()
+    {
+        var client = _factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/auth/login",
+            new LoginRequest("admin@demo.gym", "Admin123!"));
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        Assert.False(string.IsNullOrWhiteSpace(body!.AccessToken));
+    }
+}
+```
+
+- [ ] **Step 5:** Verify (θέλει Docker running): `cd backend && dotnet test --filter "FullyQualifiedName~PostgresHarnessSmokeTests"`
+Expected: PASS (κατεβάζει το `postgres:16-alpine` την πρώτη φορά).
+
+- [ ] **Step 6: Commit** `git commit -am "test: add Testcontainers Postgres harness"`
+
+### Task 27: Atomic BookingService — happy path + capacity (TDD, real Postgres)
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Contracts/BookingContracts.cs`
+- Create: `backend/src/GymBooking.Api/Services/BookingService.cs`
+- Modify: `backend/src/GymBooking.Api/Program.cs` (DI)
+- Test: `backend/tests/GymBooking.Tests/BookingTests.cs`
+
+- [ ] **Step 1:** Contracts:
+
+```csharp
+namespace GymBooking.Core.Contracts;
+
+public record CreateBookingRequest(Guid ClassSessionId);
+public record BookingResponse(Guid Id, Guid ClassSessionId, string ClassTypeName, DateTime StartsAt, string Status, DateTime CreatedAt);
+```
+
+- [ ] **Step 2:** `BookingService.cs` — **πλήρες** (περιλαμβάνει ήδη double-booking/overlap/cancel/getmine για να μη χρειαστεί ξαναγράψιμο στα επόμενα tasks· αυτό το task τεστάρει μόνο happy-path + capacity):
+
+```csharp
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace GymBooking.Api.Services;
+
+public class BookingService
+{
+    private readonly AppDbContext _dbContext;
+    private readonly ICurrentTenant _currentTenant;
+
+    public BookingService(AppDbContext dbContext, ICurrentTenant currentTenant)
+    {
+        _dbContext = dbContext;
+        _currentTenant = currentTenant;
+    }
+
+    public async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid userId, Guid classSessionId)
+    {
+        var tenantId = _currentTenant.TenantId;
+
+        await using var tx = await _dbContext.Database.BeginTransactionAsync();
+
+        // Κλειδώνει τη ΣΕΙΡΑ του session μέχρι το COMMIT — no overbooking σε ταυτόχρονες κρατήσεις.
+        var session = await _dbContext.ClassSessions
+            .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {classSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync();
+
+        if (session is null || !session.IsActive)
+        {
+            return (BookingOutcome.SessionNotFound, null);
+        }
+
+        if (session.IsCancelled)
+        {
+            return (BookingOutcome.SessionCancelled, null);
+        }
+
+        var alreadyBooked = await _dbContext.Bookings
+            .AnyAsync(b => b.UserId == userId && b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed);
+        if (alreadyBooked)
+        {
+            return (BookingOutcome.AlreadyBooked, null);
+        }
+
+        // Overlap: φέρνουμε τα confirmed sessions του χρήστη στη μνήμη (λίγα) — το AddMinutes γίνεται σε C#.
+        var newStart = session.StartsAt;
+        var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
+        var userSessions = await (
+            from b in _dbContext.Bookings
+            where b.UserId == userId && b.Status == BookingStatus.Confirmed
+            join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
+            select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
+
+        var overlaps = userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
+        if (overlaps)
+        {
+            return (BookingOutcome.TimeConflict, null);
+        }
+
+        if (session.BookedCount >= session.Capacity)
+        {
+            return (BookingOutcome.SessionFull, null);
+        }
+
+        var booking = new Booking
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserId = userId,
+            ClassSessionId = classSessionId,
+            Status = BookingStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.Bookings.Add(booking);
+        session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount
+
+        await _dbContext.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return (BookingOutcome.Success, booking);
+    }
+
+    public async Task<(BookingOutcome Outcome, Booking? Booking)> CancelAsync(Guid userId, Guid bookingId)
+    {
+        var tenantId = _currentTenant.TenantId;
+
+        await using var tx = await _dbContext.Database.BeginTransactionAsync();
+
+        var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId);
+        if (booking is null || booking.UserId != userId)
+        {
+            return (BookingOutcome.SessionNotFound, null); // ownership: μη-δική-σου → σαν να μην υπάρχει
+        }
+
+        if (booking.Status == BookingStatus.Cancelled)
+        {
+            return (BookingOutcome.Success, booking); // idempotent
+        }
+
+        var session = await _dbContext.ClassSessions
+            .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {booking.ClassSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync();
+
+        booking.Status = BookingStatus.Cancelled;
+        booking.CancelledAt = DateTime.UtcNow;
+
+        if (session is not null && session.BookedCount > 0)
+        {
+            session.BookedCount -= 1; // επιστροφή θέσης
+        }
+
+        await _dbContext.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return (BookingOutcome.Success, booking);
+    }
+
+    public async Task<List<BookingResponse>> GetMineAsync(Guid userId)
+    {
+        return await (
+            from b in _dbContext.Bookings
+            where b.UserId == userId
+            join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
+            join ct in _dbContext.ClassTypes on s.ClassTypeId equals ct.Id
+            orderby s.StartsAt
+            select new BookingResponse(
+                b.Id,
+                b.ClassSessionId,
+                ct.Name,
+                s.StartsAt,
+                b.Status.ToString(),
+                b.CreatedAt))
+            .ToListAsync();
+    }
+}
+```
+
+- [ ] **Step 3:** DI στο `Program.cs`: `builder.Services.AddScoped<BookingService>();`
+
+- [ ] **Step 4 (tests):** `BookingTests.cs` με helpers που στήνουν session + καλούν το service μέσω scope (κάθε κλήση = δικό της scope/DbContext/transaction, όπως στην πραγματικότητα):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class BookingTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public BookingTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    // Στήνει ClassType + ClassSession σε νέο tenant· επιστρέφει (tenantId, sessionId).
+    private async Task<(Guid TenantId, Guid SessionId)> SeedSessionAsync(int capacity, DateTime startsAtUtc, int durationMinutes = 60)
+    {
+        var tenantId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var classType = new ClassType
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = "Yoga",
+            DefaultDurationMinutes = durationMinutes,
+            DefaultCapacity = capacity,
+            IsActive = true,
+        };
+        var session = new ClassSession
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClassTypeId = classType.Id,
+            InstructorId = Guid.NewGuid(),
+            StartsAt = startsAtUtc,
+            DurationMinutes = durationMinutes,
+            Capacity = capacity,
+            BookedCount = 0,
+            IsActive = true,
+        };
+        db.ClassTypes.Add(classType);
+        db.ClassSessions.Add(session);
+        await db.SaveChangesAsync();
+        return (tenantId, session.Id);
+    }
+
+    private async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid tenantId, Guid userId, Guid sessionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var service = scope.ServiceProvider.GetRequiredService<BookingService>();
+        return await service.BookAsync(userId, sessionId);
+    }
+
+    private async Task<ClassSession> GetSessionAsync(Guid tenantId, Guid sessionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.ClassSessions.FirstAsync(s => s.Id == sessionId);
+    }
+
+    [Fact]
+    public async Task Book_available_session_succeeds_and_increments_bookedCount()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+
+        var (outcome, booking) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        Assert.Equal(BookingOutcome.Success, outcome);
+        Assert.NotNull(booking);
+        Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+    }
+
+    [Fact]
+    public async Task Book_full_session_returns_SessionFull()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        await BookAsync(tenantId, Guid.NewGuid(), sessionId); // γεμίζει
+
+        var (outcome, _) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        Assert.Equal(BookingOutcome.SessionFull, outcome);
+        Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+    }
+}
+```
+
+- [ ] **Step 5:** Verify → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~BookingTests"`
+
+- [ ] **Step 6: Commit** `git commit -am "feat: atomic BookingService (FOR UPDATE) + capacity tests"`
+
+### Task 28: 🔥 Concurrency test — no overbooking
+
+**Files:** Modify `backend/tests/GymBooking.Tests/BookingTests.cs`
+
+> Το κορυφαίο test της πτυχιακής: αποδεικνύει ότι ταυτόχρονες κρατήσεις **δεν** ξεπερνούν το capacity. Δεν χρειάζεται νέος κώδικας — μόνο test (το `FOR UPDATE` του Task 27 είναι ήδη η λύση).
+
+- [ ] **Step 1:** Πρόσθεσε στο `BookingTests.cs`:
+
+```csharp
+    [Fact]
+    public async Task Concurrent_bookings_never_exceed_capacity()
+    {
+        const int capacity = 3;
+        const int attempts = 12;
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity, DateTime.UtcNow.AddDays(1));
+
+        // 12 διαφορετικοί χρήστες κρατούν ΤΑΥΤΟΧΡΟΝΑ την ίδια (capacity=3) ώρα.
+        var tasks = Enumerable.Range(0, attempts)
+            .Select(_ => BookAsync(tenantId, Guid.NewGuid(), sessionId))
+            .ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        var successes = results.Count(r => r.Outcome == BookingOutcome.Success);
+        var full = results.Count(r => r.Outcome == BookingOutcome.SessionFull);
+
+        Assert.Equal(capacity, successes);          // ακριβώς 3 πέρασαν
+        Assert.Equal(attempts - capacity, full);    // οι υπόλοιποι πήραν "γεμάτο"
+        Assert.Equal(capacity, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+    }
+```
+
+- [ ] **Step 2:** Verify → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~BookingTests.Concurrent_bookings_never_exceed_capacity"`
+Expected: PASS σταθερά (τρέξ' το 2–3 φορές για σιγουριά — δεν πρέπει να "τρεμοπαίζει").
+
+- [ ] **Step 3: Commit** `git commit -am "test: concurrency proof — no overbooking under parallel bookings"`
+
+### Task 29: Anti-double-booking (ίδιο session + overlapping χρόνος)
+
+**Files:** Modify `backend/tests/GymBooking.Tests/BookingTests.cs`
+
+> Η λογική είναι ήδη στο `BookingService` (Task 27). Εδώ την επικυρώνουμε.
+
+- [ ] **Step 1:** Πρόσθεσε helper για δεύτερο session στον **ίδιο** tenant + τα tests:
+
+```csharp
+    private async Task<Guid> SeedAnotherSessionAsync(Guid tenantId, DateTime startsAtUtc, int durationMinutes = 60, int capacity = 5)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var classType = new ClassType
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = "Spin",
+            DefaultDurationMinutes = durationMinutes,
+            DefaultCapacity = capacity,
+            IsActive = true,
+        };
+        var session = new ClassSession
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClassTypeId = classType.Id,
+            InstructorId = Guid.NewGuid(),
+            StartsAt = startsAtUtc,
+            DurationMinutes = durationMinutes,
+            Capacity = capacity,
+            BookedCount = 0,
+            IsActive = true,
+        };
+        db.ClassTypes.Add(classType);
+        db.ClassSessions.Add(session);
+        await db.SaveChangesAsync();
+        return session.Id;
+    }
+
+    [Fact]
+    public async Task Booking_same_session_twice_returns_AlreadyBooked()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var userId = Guid.NewGuid();
+        await BookAsync(tenantId, userId, sessionId);
+
+        var (outcome, _) = await BookAsync(tenantId, userId, sessionId);
+
+        Assert.Equal(BookingOutcome.AlreadyBooked, outcome);
+    }
+
+    [Fact]
+    public async Task Booking_time_overlapping_session_returns_TimeConflict()
+    {
+        var start = DateTime.UtcNow.AddDays(1);
+        var (tenantId, sessionA) = await SeedSessionAsync(capacity: 5, startsAtUtc: start, durationMinutes: 60);
+        var sessionB = await SeedAnotherSessionAsync(tenantId, start.AddMinutes(30), durationMinutes: 60); // 30' επικάλυψη
+        var userId = Guid.NewGuid();
+        await BookAsync(tenantId, userId, sessionA);
+
+        var (outcome, _) = await BookAsync(tenantId, userId, sessionB);
+
+        Assert.Equal(BookingOutcome.TimeConflict, outcome);
+    }
+```
+
+- [ ] **Step 2:** Verify → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~BookingTests"`
+
+- [ ] **Step 3: Commit** `git commit -am "test: anti-double-booking (same session + time overlap)"`
+
+### Task 30: Cancel + επιστροφή θέσης
+
+**Files:** Modify `backend/tests/GymBooking.Tests/BookingTests.cs`
+
+> `CancelAsync` ήδη υλοποιήθηκε στο Task 27. Εδώ επικύρωση: επιστροφή θέσης, ownership, re-book μετά από cancel.
+
+- [ ] **Step 1:** Πρόσθεσε helper + tests:
+
+```csharp
+    private async Task<(BookingOutcome Outcome, Booking? Booking)> CancelAsync(Guid tenantId, Guid userId, Guid bookingId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var service = scope.ServiceProvider.GetRequiredService<BookingService>();
+        return await service.CancelAsync(userId, bookingId);
+    }
+
+    [Fact]
+    public async Task Cancel_returns_the_spot_and_allows_rebooking()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var userId = Guid.NewGuid();
+        var (_, booking) = await BookAsync(tenantId, userId, sessionId);
+        Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+
+        var (cancelOutcome, _) = await CancelAsync(tenantId, userId, booking!.Id);
+        Assert.Equal(BookingOutcome.Success, cancelOutcome);
+        Assert.Equal(0, (await GetSessionAsync(tenantId, sessionId)).BookedCount); // θέση επέστρεψε
+
+        // Ο ίδιος χρήστης μπορεί να ξανακρατήσει (η cancelled δεν μπλοκάρει από το partial unique index).
+        var (rebookOutcome, _) = await BookAsync(tenantId, userId, sessionId);
+        Assert.Equal(BookingOutcome.Success, rebookOutcome);
+    }
+
+    [Fact]
+    public async Task Cancel_someone_elses_booking_is_rejected()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var (_, booking) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        var (outcome, _) = await CancelAsync(tenantId, Guid.NewGuid(), booking!.Id); // άλλος χρήστης
+
+        Assert.Equal(BookingOutcome.SessionNotFound, outcome);
+        Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount); // δεν επέστρεψε θέση
+    }
+```
+
+- [ ] **Step 2:** Verify → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~BookingTests"`
+
+- [ ] **Step 3: Commit** `git commit -am "test: cancel returns spot, ownership enforced, rebooking allowed"`
+
+### Task 31: BookingsController + endpoints + relax session GET
+
+**Files:**
+- Create: `backend/src/GymBooking.Api/Controllers/BookingsController.cs`
+- Modify: `backend/src/GymBooking.Api/Controllers/ClassSessionsController.cs`
+- Test: `backend/tests/GymBooking.Tests/BookingEndpointsTests.cs`
+
+- [ ] **Step 1:** `BookingsController.cs` (userId από το `sub` claim· outcome → HTTP):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Route("bookings")]
+[Authorize]
+public class BookingsController : ControllerBase
+{
+    private readonly BookingService _service;
+
+    public BookingsController(BookingService service)
+    {
+        _service = service;
+    }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<IEnumerable<BookingResponse>>> GetMine()
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        return Ok(await _service.GetMineAsync(userId));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Book([FromBody] CreateBookingRequest request)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var (outcome, _) = await _service.BookAsync(userId, request.ClassSessionId);
+        return outcome switch
+        {
+            BookingOutcome.Success => CreatedAtAction(nameof(GetMine), null, null),
+            BookingOutcome.SessionNotFound => NotFound(),
+            BookingOutcome.SessionCancelled => Conflict("Το session έχει ακυρωθεί."),
+            BookingOutcome.SessionFull => Conflict("Το session είναι πλήρες."),
+            BookingOutcome.AlreadyBooked => Conflict("Έχεις ήδη κράτηση σε αυτό το session."),
+            BookingOutcome.TimeConflict => Conflict("Έχεις άλλη κράτηση που επικαλύπτεται χρονικά."),
+            _ => BadRequest(),
+        };
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid id)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var (outcome, _) = await _service.CancelAsync(userId, id);
+        return outcome == BookingOutcome.SessionNotFound ? NotFound() : NoContent();
+    }
+}
+```
+
+- [ ] **Step 2:** Χαλάρωσε το authorization στο `ClassSessionsController.cs`: άλλαξε το class-level attribute από `[Authorize(Policy = Policies.RequireInstructor)]` σε σκέτο `[Authorize]`, και **πρόσθεσε** `[Authorize(Policy = Policies.RequireInstructor)]` πάνω στις `Create` και `Cancel` (τα GET μένουν ανοιχτά σε κάθε authenticated):
+
+```csharp
+[ApiController]
+[Route("class-sessions")]
+[Authorize]
+public class ClassSessionsController : ControllerBase
+{
+    // ... GetAll / GetById: χωρίς επιπλέον attribute (κάθε authenticated) ...
+
+    [HttpPost]
+    [Authorize(Policy = Policies.RequireInstructor)]
+    public async Task<ActionResult<ClassSessionResponse>> Create(...) { ... }
+
+    [HttpPost("{id:guid}/cancel")]
+    [Authorize(Policy = Policies.RequireInstructor)]
+    public async Task<IActionResult> Cancel(...) { ... }
+}
+```
+
+- [ ] **Step 3 (tests):** `BookingEndpointsTests.cs` — HTTP-level μέσω Postgres factory. Αντέγραψε τα helpers `CreateUserAsync`/`LoginAsync` (όπως στα Φ2 test files). Το session πρέπει να στηθεί στο **tenant του χρήστη** (πάρ' το από τον created user):
+
+```csharp
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class BookingEndpointsTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public BookingEndpointsTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    // (Αντέγραψε CreateUserAsync + LoginAsync από τα Φ2 test files — ίδια υλοποίηση.)
+
+    private async Task<Guid> SeedSessionForTenantAsync(Guid tenantId, int capacity)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = capacity, IsActive = true };
+        var s = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = Guid.NewGuid(), StartsAt = DateTime.UtcNow.AddDays(1), DurationMinutes = 60, Capacity = capacity, IsActive = true };
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.Add(s);
+        await db.SaveChangesAsync();
+        return s.Id;
+    }
+
+    [Fact]
+    public async Task Member_books_session_then_it_appears_in_my_bookings()
+    {
+        var user = await CreateUserAsync("booker@demo.gym", "Test1234!", Roles.User);
+        var sessionId = await SeedSessionForTenantAsync(user.TenantId, capacity: 5);
+
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "booker@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var bookResponse = await client.PostAsJsonAsync("/bookings", new CreateBookingRequest(sessionId));
+        Assert.Equal(HttpStatusCode.Created, bookResponse.StatusCode);
+
+        var mine = await client.GetFromJsonAsync<List<BookingResponse>>("/bookings/me");
+        Assert.Contains(mine!, b => b.ClassSessionId == sessionId && b.Status == "Confirmed");
+    }
+
+    [Fact]
+    public async Task Booking_full_session_returns_409()
+    {
+        var user = await CreateUserAsync("booker-full@demo.gym", "Test1234!", Roles.User);
+        var sessionId = await SeedSessionForTenantAsync(user.TenantId, capacity: 1);
+        var other = await CreateUserAsync("booker-first@demo.gym", "Test1234!", Roles.User);
+
+        // Ο "other" πρέπει να είναι στο ΙΔΙΟ tenant για να δει το session — απλούστερο: γέμισε το session
+        // απευθείας μέσω του service σε scope του tenant.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(user.TenantId);
+            var svc = scope.ServiceProvider.GetRequiredService<GymBooking.Api.Services.BookingService>();
+            await svc.BookAsync(Guid.NewGuid(), sessionId);
+        }
+
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "booker-full@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsJsonAsync("/bookings", new CreateBookingRequest(sessionId));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+}
+```
+
+- [ ] **Step 4:** Verify ΟΛΑ → PASS: `cd backend && dotnet test`
+Expected: όλα PASS (Φ1/Φ2 InMemory + Φ3 Postgres).
+
+- [ ] **Step 5: Commit** `git commit -am "feat: bookings endpoints + open session GET to authenticated users"`
+
+### Task 32: Frontend — booking models + API service
+
+**Files:**
+- Modify: `frontend/libs/models/src/lib/models.ts`
+- Create: `frontend/libs/data-access/src/lib/booking-api.service.ts`
+- Modify: `frontend/libs/data-access/src/index.ts`
+
+> `nvm use 20` πρώτα.
+
+- [ ] **Step 1:** Πρόσθεσε στο `models.ts`:
+
+```typescript
+export interface Booking {
+  id: string;
+  classSessionId: string;
+  classTypeName: string;
+  startsAt: string; // ISO UTC
+  status: string;   // 'Confirmed' | 'Cancelled'
+  createdAt: string;
+}
+
+export interface CreateBookingRequest {
+  classSessionId: string;
+}
+```
+
+- [ ] **Step 2:** `booking-api.service.ts`:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { Booking, CreateBookingRequest } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class BookingApiService {
+  private readonly http = inject(HttpClient);
+
+  getMine(): Observable<Booking[]> {
+    return this.http.get<Booking[]>('/bookings/me');
+  }
+
+  book(request: CreateBookingRequest): Observable<void> {
+    return this.http.post<void>('/bookings', request);
+  }
+
+  cancel(id: string): Observable<void> {
+    return this.http.post<void>(`/bookings/${id}/cancel`, {});
+  }
+}
+```
+
+- [ ] **Step 3:** Πρόσθεσε στο `frontend/libs/data-access/src/index.ts`: `export * from './lib/booking-api.service';`
+
+- [ ] **Step 4:** Verify: `cd frontend && npx nx run-many -t lint -p models data-access` → PASS.
+
+- [ ] **Step 5: Commit** `git commit -am "feat(fe): booking models + API service"`
+
+### Task 33: Frontend — customer app: book & cancel UI
+
+**Files:**
+- Create: `frontend/apps/customer/src/app/sessions/sessions.ts`
+- Create: `frontend/apps/customer/src/app/sessions/sessions.html`
+- Modify: `frontend/apps/customer/src/app/app.routes.ts`
+- Modify: `frontend/apps/customer/src/app/dashboard/dashboard.ts` + `dashboard.html` (link — πρόσθεσε `RouterLink` στα imports όπως στη Φ2)
+
+> Reuse το υπάρχον `ClassSessionApiService` (GET `/class-sessions`, πλέον ανοιχτό σε authenticated) + το νέο `BookingApiService`. Οι κρατήσεις μου φαίνονται στην ίδια σελίδα με cancel.
+
+- [ ] **Step 1:** `sessions.ts` (standalone, Signals):
+
+```typescript
+import { Component, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatListModule } from '@angular/material/list';
+import { BookingApiService, ClassSessionApiService } from '@frontend/data-access';
+import { Booking, ClassSession } from '@frontend/models';
+
+@Component({
+  selector: 'app-sessions',
+  standalone: true,
+  imports: [DatePipe, MatButtonModule, MatListModule],
+  templateUrl: './sessions.html',
+})
+export class Sessions {
+  private readonly sessionApi = inject(ClassSessionApiService);
+  private readonly bookingApi = inject(BookingApiService);
+
+  protected readonly sessions = signal<ClassSession[]>([]);
+  protected readonly myBookings = signal<Booking[]>([]);
+  protected readonly message = signal<string | null>(null);
+
+  constructor() {
+    this.reload();
+  }
+
+  private reload(): void {
+    this.sessionApi.getAll().subscribe((items) => this.sessions.set(items));
+    this.bookingApi.getMine().subscribe((items) => this.myBookings.set(items));
+  }
+
+  book(session: ClassSession): void {
+    this.message.set(null);
+    this.bookingApi.book({ classSessionId: session.id }).subscribe({
+      next: () => this.reload(),
+      error: (err) => this.message.set(err?.error ?? 'Η κράτηση απέτυχε.'),
+    });
+  }
+
+  cancel(booking: Booking): void {
+    this.bookingApi.cancel(booking.id).subscribe({ next: () => this.reload() });
+  }
+}
+```
+
+- [ ] **Step 2:** `sessions.html`:
+
+```html
+<h1 class="text-2xl font-bold m-4">Διαθέσιμα μαθήματα</h1>
+
+@if (message(); as m) {
+  <p class="m-4 text-red-600">{{ m }}</p>
+}
+
+<mat-list class="m-4">
+  @for (s of sessions(); track s.id) {
+    <mat-list-item>
+      {{ s.classTypeName }} — {{ s.startsAt | date: 'dd/MM HH:mm' }} —
+      {{ s.bookedCount }}/{{ s.capacity }}
+      <button mat-raised-button color="primary" class="ml-4"
+              [disabled]="s.bookedCount >= s.capacity || s.isCancelled"
+              (click)="book(s)">Κράτηση</button>
+    </mat-list-item>
+  } @empty {
+    <p class="text-gray-500">Δεν υπάρχουν διαθέσιμα μαθήματα.</p>
+  }
+</mat-list>
+
+<h2 class="text-xl font-bold m-4">Οι κρατήσεις μου</h2>
+<mat-list class="m-4">
+  @for (b of myBookings(); track b.id) {
+    <mat-list-item>
+      {{ b.classTypeName }} — {{ b.startsAt | date: 'dd/MM HH:mm' }} — {{ b.status }}
+      @if (b.status === 'Confirmed') {
+        <button mat-button color="warn" class="ml-4" (click)="cancel(b)">Ακύρωση</button>
+      }
+    </mat-list-item>
+  } @empty {
+    <p class="text-gray-500">Δεν έχεις κρατήσεις.</p>
+  }
+</mat-list>
+```
+
+- [ ] **Step 3:** Route στο customer `app.routes.ts` — import `Sessions`, πρόσθεσε πριν το wildcard:
+
+```typescript
+  { path: 'sessions', component: Sessions, canActivate: [authGuard] },
+```
+
+- [ ] **Step 4:** Link στο customer `dashboard.html`: `<a mat-button routerLink="/sessions">Μαθήματα</a>` (πρόσθεσε `RouterLink` στα imports του `Dashboard`).
+
+- [ ] **Step 5:** Verify: `cd frontend && npx nx lint customer && npx nx build customer` → PASS. (Optional e2e με backend up: login ως member → `/sessions` → Κράτηση → εμφανίζεται στις κρατήσεις μου → Ακύρωση.)
+
+- [ ] **Step 6: Commit** `git commit -am "feat(customer): book & cancel sessions UI"`
+
+### Task 34: CI check + ενημέρωση progress
+
+**Files:** Modify `CLAUDE.md`
+
+- [ ] **Step 1:** Τρέξε ό,τι τρέχει το CI (Docker up για τα Testcontainers):
+
+```bash
+cd backend && dotnet build && dotnet test
+cd ../frontend && npx nx run-many -t lint build
+```
+Expected: όλα PASS.
+
+- [ ] **Step 2:** Στο `CLAUDE.md` → progress tracker: τσέκαρε `[x] Φ3 — Booking core (atomic) + tests` και ενημέρωσε το «Τώρα δουλεύω / Επόμενο» σε **Φ4 — Weekly schedule + φίλτρα + customer dashboard**.
+
+- [ ] **Step 3: Commit** `git commit -am "docs: mark Phase 3 complete"`
+
+---
+
+## PHASE 4: Weekly schedule + φίλτρα + customer dashboard (~12h)
+
+> Κυρίως customer-facing. Το backend query είναι απλό read (χωρίς transactions/locks), οπότε τα backend tests τρέχουν στο **Postgres harness** (Φ3) για ρεαλιστικά dates/joins. Ακολουθεί τα Φ1–Φ3 patterns.
+
+### Αποφάσεις Φάσης 4 (κλειδωμένες)
+- **Νέο `GET /schedule` endpoint** _(2026-07-09)_ (ξεχωριστό από το instructor-facing `GET /class-sessions`): επιστρέφει τα sessions μιας εβδομάδας, εμπλουτισμένα για τον **τρέχοντα χρήστη**.
+- **Week range = client-driven, tz-agnostic server** _(2026-07-09)_: ο client στέλνει `from`/`to` ως **UTC ISO** (υπολογίζει Δευτέρα 00:00 τοπικής ώρας → UTC). Ο controller τα δέχεται ως `DateTimeOffset` και περνά `.UtcDateTime` — αποφεύγει το `DateTime.Kind` gotcha του Npgsql (timestamptz απαιτεί Utc).
+- **`IsBookedByMe` + `MyBookingId` flags στο response** _(2026-07-09)_: το service κάνει lookup τις confirmed κρατήσεις του χρήστη· ο customer βλέπει «Κράτηση» ή «Ακύρωση» απευθείας από το πρόγραμμα.
+- **Filter options από backend** _(2026-07-09)_: reuse `GET /class-types` (**χαλαρώνουμε** το authorization του σε `[Authorize]` — writes μένουν `RequireInstructor`) + νέο `GET /instructors`. Πλήρεις λίστες ακόμα κι αν μια εβδομάδα δεν έχει sessions.
+- **Dashboard split = client-side** _(2026-07-09)_: το `/bookings/me` επιστρέφει τα πάντα· ο customer χωρίζει σε «επερχόμενες» (Confirmed & StartsAt ≥ τώρα) και «ιστορικό». Καμία νέα endpoint.
+- **Το weekly schedule αντικαθιστά** τη flat `/sessions` σελίδα της Φ3 στο customer (superseded) — τη διαγράφουμε.
+
+### Task 35: Schedule service + endpoint (backend)
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Contracts/ScheduleContracts.cs`
+- Create: `backend/src/GymBooking.Api/Services/ScheduleService.cs`
+- Create: `backend/src/GymBooking.Api/Controllers/ScheduleController.cs`
+- Modify: `backend/src/GymBooking.Api/Program.cs` (DI)
+- Test: `backend/tests/GymBooking.Tests/ScheduleTests.cs`
+
+- [ ] **Step 1:** Contract:
+
+```csharp
+namespace GymBooking.Core.Contracts;
+
+public record ScheduleSessionResponse(
+    Guid Id,
+    Guid ClassTypeId,
+    string ClassTypeName,
+    Guid InstructorId,
+    string InstructorName,
+    DateTime StartsAt,
+    int DurationMinutes,
+    int Capacity,
+    int BookedCount,
+    bool IsBookedByMe,
+    Guid? MyBookingId);
+```
+
+- [ ] **Step 2:** `ScheduleService.cs` (κρύβει cancelled/inactive· εμπλουτισμός με τις κρατήσεις μου):
+
+```csharp
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace GymBooking.Api.Services;
+
+public class ScheduleService
+{
+    private readonly AppDbContext _dbContext;
+
+    public ScheduleService(AppDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public async Task<List<ScheduleSessionResponse>> GetScheduleAsync(
+        Guid userId, DateTime fromUtc, DateTime toUtc, Guid? classTypeId, Guid? instructorId)
+    {
+        var query =
+            from s in _dbContext.ClassSessions
+            where s.IsActive && !s.IsCancelled && s.StartsAt >= fromUtc && s.StartsAt < toUtc
+            join ct in _dbContext.ClassTypes on s.ClassTypeId equals ct.Id
+            join u in _dbContext.Users on s.InstructorId equals u.Id
+            select new { s, ClassTypeName = ct.Name, InstructorName = u.FirstName + " " + u.LastName };
+
+        if (classTypeId.HasValue)
+        {
+            query = query.Where(x => x.s.ClassTypeId == classTypeId.Value);
+        }
+        if (instructorId.HasValue)
+        {
+            query = query.Where(x => x.s.InstructorId == instructorId.Value);
+        }
+
+        var rows = await query.OrderBy(x => x.s.StartsAt).ToListAsync();
+
+        var mine = (await _dbContext.Bookings
+                .Where(b => b.UserId == userId && b.Status == BookingStatus.Confirmed)
+                .Select(b => new { b.Id, b.ClassSessionId })
+                .ToListAsync())
+            .ToDictionary(b => b.ClassSessionId, b => b.Id);
+
+        return rows.Select(x => new ScheduleSessionResponse(
+            x.s.Id,
+            x.s.ClassTypeId,
+            x.ClassTypeName,
+            x.s.InstructorId,
+            x.InstructorName,
+            x.s.StartsAt,
+            x.s.DurationMinutes,
+            x.s.Capacity,
+            x.s.BookedCount,
+            mine.ContainsKey(x.s.Id),
+            mine.TryGetValue(x.s.Id, out var bid) ? bid : (Guid?)null))
+            .ToList();
+    }
+}
+```
+
+- [ ] **Step 3:** `ScheduleController.cs` (`DateTimeOffset` για ασφαλές UTC binding):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Route("schedule")]
+[Authorize]
+public class ScheduleController : ControllerBase
+{
+    private readonly ScheduleService _service;
+
+    public ScheduleController(ScheduleService service)
+    {
+        _service = service;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<ScheduleSessionResponse>>> Get(
+        [FromQuery] DateTimeOffset from,
+        [FromQuery] DateTimeOffset to,
+        [FromQuery] Guid? classTypeId,
+        [FromQuery] Guid? instructorId)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var result = await _service.GetScheduleAsync(userId, from.UtcDateTime, to.UtcDateTime, classTypeId, instructorId);
+        return Ok(result);
+    }
+}
+```
+
+- [ ] **Step 4:** DI στο `Program.cs`: `builder.Services.AddScoped<ScheduleService>();`
+
+- [ ] **Step 5 (tests):** `ScheduleTests.cs` (Postgres collection):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class ScheduleTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public ScheduleTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private sealed record Seeded(Guid TenantId, Guid ClassTypeId, Guid InstructorId, Guid SessionThisWeek, Guid SessionNextWeek);
+
+    private async Task<Seeded> SeedAsync(DateTime weekStartUtc)
+    {
+        var tenantId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var instructor = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserName = $"instr-{tenantId}@demo.gym",
+            Email = $"instr-{tenantId}@demo.gym",
+            FirstName = "Maria",
+            LastName = "Papadopoulou",
+        };
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = 10, IsActive = true };
+        var s1 = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = instructor.Id, StartsAt = weekStartUtc.AddDays(1).AddHours(18), DurationMinutes = 60, Capacity = 10, IsActive = true };
+        var s2 = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = instructor.Id, StartsAt = weekStartUtc.AddDays(8).AddHours(18), DurationMinutes = 60, Capacity = 10, IsActive = true };
+
+        db.Users.Add(instructor);
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.AddRange(s1, s2);
+        await db.SaveChangesAsync();
+
+        return new Seeded(tenantId, ct.Id, instructor.Id, s1.Id, s2.Id);
+    }
+
+    private async Task<List<ScheduleSessionResponse>> GetScheduleAsync(
+        Guid tenantId, Guid userId, DateTime fromUtc, DateTime toUtc, Guid? classTypeId = null)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var svc = scope.ServiceProvider.GetRequiredService<ScheduleService>();
+        return await svc.GetScheduleAsync(userId, fromUtc, toUtc, classTypeId, null);
+    }
+
+    [Fact]
+    public async Task Schedule_returns_only_this_week_with_booked_flag()
+    {
+        var weekStart = new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc);
+        var seeded = await SeedAsync(weekStart);
+        var userId = Guid.NewGuid();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(seeded.TenantId);
+            var booking = scope.ServiceProvider.GetRequiredService<BookingService>();
+            await booking.BookAsync(userId, seeded.SessionThisWeek);
+        }
+
+        var result = await GetScheduleAsync(seeded.TenantId, userId, weekStart, weekStart.AddDays(7));
+
+        Assert.Single(result); // το session της επόμενης εβδομάδας εξαιρείται
+        Assert.Equal(seeded.SessionThisWeek, result[0].Id);
+        Assert.True(result[0].IsBookedByMe);
+        Assert.NotNull(result[0].MyBookingId);
+        Assert.Equal("Maria Papadopoulou", result[0].InstructorName);
+    }
+
+    [Fact]
+    public async Task Schedule_filters_by_class_type()
+    {
+        var weekStart = new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc);
+        var seeded = await SeedAsync(weekStart);
+
+        var none = await GetScheduleAsync(seeded.TenantId, Guid.NewGuid(), weekStart, weekStart.AddDays(7), classTypeId: Guid.NewGuid());
+        Assert.Empty(none);
+
+        var some = await GetScheduleAsync(seeded.TenantId, Guid.NewGuid(), weekStart, weekStart.AddDays(7), classTypeId: seeded.ClassTypeId);
+        Assert.Single(some);
+    }
+}
+```
+
+- [ ] **Step 6:** Verify → PASS: `cd backend && dotnet test --filter "FullyQualifiedName~ScheduleTests"`
+
+- [ ] **Step 7: Commit** `git commit -am "feat: GET /schedule (weekly, filtered, booked-by-me flag)"`
+
+### Task 36: GET /instructors + άνοιγμα του class-types GET
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Contracts/InstructorContracts.cs`
+- Create: `backend/src/GymBooking.Api/Controllers/InstructorsController.cs`
+- Modify: `backend/src/GymBooking.Api/Controllers/ClassTypesController.cs`
+- Test: `backend/tests/GymBooking.Tests/InstructorsTests.cs`
+
+- [ ] **Step 1:** Contract:
+
+```csharp
+namespace GymBooking.Core.Contracts;
+
+public record InstructorResponse(Guid Id, string Name);
+```
+
+- [ ] **Step 2:** `InstructorsController.cs` (`GetUsersInRoleAsync` σέβεται το tenant query filter μέσω του CurrentTenant που έθεσε το middleware):
+
+```csharp
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Route("instructors")]
+[Authorize]
+public class InstructorsController : ControllerBase
+{
+    private readonly UserManager<ApplicationUser> _userManager;
+
+    public InstructorsController(UserManager<ApplicationUser> userManager)
+    {
+        _userManager = userManager;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<InstructorResponse>>> GetAll()
+    {
+        var instructors = await _userManager.GetUsersInRoleAsync(Roles.Instructor);
+        return Ok(instructors
+            .OrderBy(u => u.LastName)
+            .Select(u => new InstructorResponse(u.Id, u.FirstName + " " + u.LastName)));
+    }
+}
+```
+
+- [ ] **Step 3:** Χαλάρωσε το `ClassTypesController.cs`: άλλαξε το class-level `[Authorize(Policy = Policies.RequireInstructor)]` σε σκέτο `[Authorize]`, και βάλε `[Authorize(Policy = Policies.RequireInstructor)]` πάνω στις `Create`, `Update`, `Delete` (τα GET ανοιχτά σε κάθε authenticated — ο customer τα θέλει για το filter dropdown).
+
+- [ ] **Step 4 (tests):** `InstructorsTests.cs`. Χρειάζεται caller + instructor στο **ίδιο** tenant (το κοινό `CreateUserAsync` βάζει τυχαίο TenantId ανά χρήστη), οπότε ο helper εδώ δέχεται ρητό tenantId:
+
+```csharp
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class InstructorsTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public InstructorsTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task CreateUserInTenantAsync(Guid tenantId, string email, string password, params string[] roles)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new ApplicationRole { Name = role });
+            }
+        }
+
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserName = email,
+            Email = email,
+            FirstName = "First",
+            LastName = email.Split('@')[0],
+            EmailConfirmed = true,
+        };
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
+        foreach (var role in roles)
+        {
+            await userManager.AddToRoleAsync(user, role);
+        }
+    }
+
+    private static async Task<string> LoginAsync(HttpClient client, string email, string password)
+    {
+        var response = await client.PostAsJsonAsync("/auth/login", new LoginRequest(email, password));
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        return body!.AccessToken;
+    }
+
+    [Fact]
+    public async Task Instructors_list_contains_instructors_not_plain_members()
+    {
+        var tenantId = Guid.NewGuid();
+        await CreateUserInTenantAsync(tenantId, "the-instr@demo.gym", "Test1234!", Roles.Instructor);
+        await CreateUserInTenantAsync(tenantId, "the-member@demo.gym", "Test1234!", Roles.User);
+
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "the-member@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var list = await client.GetFromJsonAsync<List<InstructorResponse>>("/instructors");
+
+        Assert.Contains(list!, i => i.Name.Contains("the-instr"));
+        Assert.DoesNotContain(list!, i => i.Name.Contains("the-member"));
+    }
+}
+```
+
+- [ ] **Step 5:** Verify ΟΛΑ → PASS: `cd backend && dotnet test`
+
+- [ ] **Step 6: Commit** `git commit -am "feat: GET /instructors + open class-types GET to authenticated"`
+
+### Task 37: Frontend — schedule/instructor models + API services
+
+**Files:**
+- Modify: `frontend/libs/models/src/lib/models.ts`
+- Create: `frontend/libs/data-access/src/lib/schedule-api.service.ts`
+- Create: `frontend/libs/data-access/src/lib/instructor-api.service.ts`
+- Modify: `frontend/libs/data-access/src/index.ts`
+
+> `nvm use 20`.
+
+- [ ] **Step 1:** Πρόσθεσε στο `models.ts`:
+
+```typescript
+export interface ScheduleSession {
+  id: string;
+  classTypeId: string;
+  classTypeName: string;
+  instructorId: string;
+  instructorName: string;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+  capacity: number;
+  bookedCount: number;
+  isBookedByMe: boolean;
+  myBookingId: string | null;
+}
+
+export interface Instructor {
+  id: string;
+  name: string;
+}
+
+export interface ScheduleQuery {
+  from: string; // ISO UTC
+  to: string;   // ISO UTC
+  classTypeId?: string;
+  instructorId?: string;
+}
+```
+
+- [ ] **Step 2:** `schedule-api.service.ts`:
+
+```typescript
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { ScheduleQuery, ScheduleSession } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class ScheduleApiService {
+  private readonly http = inject(HttpClient);
+
+  getSchedule(query: ScheduleQuery): Observable<ScheduleSession[]> {
+    let params = new HttpParams().set('from', query.from).set('to', query.to);
+    if (query.classTypeId) {
+      params = params.set('classTypeId', query.classTypeId);
+    }
+    if (query.instructorId) {
+      params = params.set('instructorId', query.instructorId);
+    }
+    return this.http.get<ScheduleSession[]>('/schedule', { params });
+  }
+}
+```
+
+- [ ] **Step 3:** `instructor-api.service.ts`:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { Instructor } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class InstructorApiService {
+  private readonly http = inject(HttpClient);
+
+  getAll(): Observable<Instructor[]> {
+    return this.http.get<Instructor[]>('/instructors');
+  }
+}
+```
+
+- [ ] **Step 4:** Πρόσθεσε στο `data-access/src/index.ts`:
+
+```typescript
+export * from './lib/schedule-api.service';
+export * from './lib/instructor-api.service';
+```
+
+- [ ] **Step 5:** Verify: `cd frontend && npx nx run-many -t lint -p models data-access` → PASS.
+
+- [ ] **Step 6: Commit** `git commit -am "feat(fe): schedule/instructor models + API services"`
+
+### Task 38: customer app — weekly schedule σελίδα
+
+**Files:**
+- Create: `frontend/apps/customer/src/app/schedule/schedule.ts`
+- Create: `frontend/apps/customer/src/app/schedule/schedule.html`
+- Modify: `frontend/apps/customer/src/app/app.routes.ts`
+- Delete: `frontend/apps/customer/src/app/sessions/sessions.ts` + `sessions.html` (superseded από το schedule)
+
+- [ ] **Step 1:** `schedule.ts` (Signals· εβδομάδα ξεκινά Δευτέρα τοπικής ώρας· στέλνει UTC):
+
+```typescript
+import { Component, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatListModule } from '@angular/material/list';
+import { MatSelectModule } from '@angular/material/select';
+import {
+  BookingApiService,
+  ClassTypeApiService,
+  InstructorApiService,
+  ScheduleApiService,
+} from '@frontend/data-access';
+import { ClassType, Instructor, ScheduleSession } from '@frontend/models';
+
+@Component({
+  selector: 'app-schedule',
+  standalone: true,
+  imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatListModule, MatSelectModule],
+  templateUrl: './schedule.html',
+})
+export class Schedule {
+  private readonly scheduleApi = inject(ScheduleApiService);
+  private readonly bookingApi = inject(BookingApiService);
+  private readonly classTypeApi = inject(ClassTypeApiService);
+  private readonly instructorApi = inject(InstructorApiService);
+
+  protected readonly weekStart = signal(this.mondayOf(new Date()));
+  protected readonly sessions = signal<ScheduleSession[]>([]);
+  protected readonly classTypes = signal<ClassType[]>([]);
+  protected readonly instructors = signal<Instructor[]>([]);
+  protected readonly classTypeId = signal<string>('');
+  protected readonly instructorId = signal<string>('');
+  protected readonly message = signal<string | null>(null);
+
+  protected readonly weekEnd = computed(() => {
+    const d = new Date(this.weekStart());
+    d.setDate(d.getDate() + 6);
+    return d;
+  });
+
+  constructor() {
+    this.classTypeApi.getAll().subscribe((x) => this.classTypes.set(x));
+    this.instructorApi.getAll().subscribe((x) => this.instructors.set(x));
+    this.load();
+  }
+
+  private mondayOf(date: Date): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dayFromMonday = (d.getDay() + 6) % 7; // Κυρ=6 ... Δευ=0
+    d.setDate(d.getDate() - dayFromMonday);
+    return d;
+  }
+
+  private load(): void {
+    const from = this.weekStart();
+    const to = new Date(from);
+    to.setDate(to.getDate() + 7);
+    this.scheduleApi
+      .getSchedule({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        classTypeId: this.classTypeId() || undefined,
+        instructorId: this.instructorId() || undefined,
+      })
+      .subscribe((x) => this.sessions.set(x));
+  }
+
+  changeWeek(deltaDays: number): void {
+    const d = new Date(this.weekStart());
+    d.setDate(d.getDate() + deltaDays);
+    this.weekStart.set(d);
+    this.load();
+  }
+
+  book(session: ScheduleSession): void {
+    this.message.set(null);
+    this.bookingApi.book({ classSessionId: session.id }).subscribe({
+      next: () => this.load(),
+      error: (err) => this.message.set(err?.error ?? 'Η κράτηση απέτυχε.'),
+    });
+  }
+
+  cancel(session: ScheduleSession): void {
+    if (!session.myBookingId) {
+      return;
+    }
+    this.bookingApi.cancel(session.myBookingId).subscribe({ next: () => this.load() });
+  }
+}
+```
+
+- [ ] **Step 2:** `schedule.html` (mobile-first· `[ngModel]`+`(ngModelChange)` για signals):
+
+```html
+<div class="p-4">
+  <div class="flex items-center gap-2 mb-4">
+    <button mat-button (click)="changeWeek(-7)">‹ Προηγ.</button>
+    <span class="font-bold">{{ weekStart() | date: 'dd/MM' }} – {{ weekEnd() | date: 'dd/MM' }}</span>
+    <button mat-button (click)="changeWeek(7)">Επόμ. ›</button>
+  </div>
+
+  <div class="flex gap-4 mb-4 flex-wrap">
+    <mat-form-field>
+      <mat-label>Είδος</mat-label>
+      <mat-select [ngModel]="classTypeId()" (ngModelChange)="classTypeId.set($event); load()">
+        <mat-option value="">Όλα</mat-option>
+        @for (ct of classTypes(); track ct.id) {
+          <mat-option [value]="ct.id">{{ ct.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field>
+      <mat-label>Προπονητής</mat-label>
+      <mat-select [ngModel]="instructorId()" (ngModelChange)="instructorId.set($event); load()">
+        <mat-option value="">Όλοι</mat-option>
+        @for (i of instructors(); track i.id) {
+          <mat-option [value]="i.id">{{ i.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @if (message(); as m) { <p class="text-red-600 mb-4">{{ m }}</p> }
+
+  <mat-list>
+    @for (s of sessions(); track s.id) {
+      <mat-list-item>
+        <div class="flex items-center justify-between w-full gap-2">
+          <span>{{ s.startsAt | date: 'EEE dd/MM HH:mm' }} — {{ s.classTypeName }} — {{ s.instructorName }} — {{ s.bookedCount }}/{{ s.capacity }}</span>
+          @if (s.isBookedByMe) {
+            <button mat-button color="warn" (click)="cancel(s)">Ακύρωση</button>
+          } @else {
+            <button mat-raised-button color="primary" [disabled]="s.bookedCount >= s.capacity" (click)="book(s)">Κράτηση</button>
+          }
+        </div>
+      </mat-list-item>
+    } @empty {
+      <p class="text-gray-500">Δεν υπάρχουν μαθήματα αυτή την εβδομάδα.</p>
+    }
+  </mat-list>
+</div>
+```
+> Το `load()` πρέπει να είναι καλέσιμο από το template — άλλαξε το `private load()` σε `protected load()` στο `schedule.ts`.
+
+- [ ] **Step 3:** Στο customer `app.routes.ts`: αφαίρεσε το import + route του `Sessions`, πρόσθεσε το `Schedule`:
+
+```typescript
+import { Schedule } from './schedule/schedule';
+```
+```typescript
+  { path: 'schedule', component: Schedule, canActivate: [authGuard] },
+```
+
+- [ ] **Step 4:** Διάγραψε τον φάκελο `frontend/apps/customer/src/app/sessions/` (Φ3 flat list — superseded).
+
+- [ ] **Step 5:** Verify: `cd frontend && npx nx lint customer && npx nx build customer` → PASS.
+
+- [ ] **Step 6: Commit** `git commit -am "feat(customer): weekly schedule with filters"`
+
+### Task 39: customer dashboard — επερχόμενες + ιστορικό
+
+**Files:**
+- Modify: `frontend/apps/customer/src/app/dashboard/dashboard.ts`
+- Modify: `frontend/apps/customer/src/app/dashboard/dashboard.html`
+
+- [ ] **Step 1:** `dashboard.ts` (split client-side από το `/bookings/me`):
+
+```typescript
+import { Component, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
+import { MatListModule } from '@angular/material/list';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '@frontend/auth';
+import { BookingApiService } from '@frontend/data-access';
+import { Booking } from '@frontend/models';
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [DatePipe, MatButtonModule, MatListModule, RouterLink],
+  templateUrl: './dashboard.html',
+})
+export class Dashboard {
+  protected readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly bookingApi = inject(BookingApiService);
+
+  private readonly bookings = signal<Booking[]>([]);
+
+  protected readonly upcoming = computed(() =>
+    this.bookings().filter((b) => b.status === 'Confirmed' && new Date(b.startsAt).getTime() >= Date.now()),
+  );
+  protected readonly history = computed(() =>
+    this.bookings().filter((b) => b.status !== 'Confirmed' || new Date(b.startsAt).getTime() < Date.now()),
+  );
+
+  constructor() {
+    this.bookingApi.getMine().subscribe((x) => this.bookings.set(x));
+  }
+
+  logout(): void {
+    this.authService.logout();
+    this.router.navigateByUrl('/login');
+  }
+}
+```
+
+- [ ] **Step 2:** `dashboard.html`:
+
+```html
+<div class="p-4">
+  <div class="flex items-center justify-between mb-4">
+    <a mat-raised-button color="primary" routerLink="/schedule">Πρόγραμμα μαθημάτων</a>
+    <button mat-button (click)="logout()">Αποσύνδεση</button>
+  </div>
+
+  <h2 class="text-xl font-bold mb-2">Επερχόμενες κρατήσεις</h2>
+  <mat-list>
+    @for (b of upcoming(); track b.id) {
+      <mat-list-item>{{ b.classTypeName }} — {{ b.startsAt | date: 'EEE dd/MM HH:mm' }}</mat-list-item>
+    } @empty {
+      <p class="text-gray-500">Καμία επερχόμενη κράτηση.</p>
+    }
+  </mat-list>
+
+  <h2 class="text-xl font-bold mt-6 mb-2">Ιστορικό</h2>
+  <mat-list>
+    @for (b of history(); track b.id) {
+      <mat-list-item>{{ b.classTypeName }} — {{ b.startsAt | date: 'dd/MM/yyyy HH:mm' }} — {{ b.status }}</mat-list-item>
+    } @empty {
+      <p class="text-gray-500">Κενό ιστορικό.</p>
+    }
+  </mat-list>
+</div>
+```
+
+- [ ] **Step 3:** Verify: `cd frontend && npx nx lint customer && npx nx build customer` → PASS. (Optional e2e με backend up: login member → dashboard δείχνει επερχόμενες/ιστορικό· link → schedule → κράτηση → επιστροφή στο dashboard την δείχνει στις επερχόμενες.)
+
+- [ ] **Step 4: Commit** `git commit -am "feat(customer): dashboard with upcoming + history"`
+
+### Task 40: CI check + ενημέρωση progress
+
+**Files:** Modify `CLAUDE.md`
+
+- [ ] **Step 1:** Τρέξε ό,τι τρέχει το CI (Docker up για Testcontainers):
+
+```bash
+cd backend && dotnet build && dotnet test
+cd ../frontend && npx nx run-many -t lint build
+```
+Expected: όλα PASS.
+
+- [ ] **Step 2:** Στο `CLAUDE.md` → progress tracker: τσέκαρε `[x] Φ4 — Weekly schedule + φίλτρα + customer dashboard` και ενημέρωσε «Τώρα δουλεύω / Επόμενο» σε **Φ5 — Subscriptions/plans + consumption**.
+
+- [ ] **Step 3: Commit** `git commit -am "docs: mark Phase 4 complete"`
+
+---
+
+## PHASE 5: Subscriptions/plans + consumption (~12h)
+
+> Επεκτείνει τον atomic πυρήνα της Φ3: το booking **καταναλώνει** συνδρομή μέσα στο ίδιο transaction. Admin-facing (plans + ανάθεση) στο `staff`, view στο `customer`.
+
+### Αποφάσεις Φάσης 5 (κλειδωμένες)
+- **Συνδρομή υποχρεωτική για booking** _(2026-07-09)_: χωρίς χρήσιμη συνδρομή → νέο outcome `NoSubscription`. Χρήσιμη = `Status=Active` & `ValidFrom ≤ τώρα ≤ ValidTo` & (`RemainingSessions == null` (Unlimited) ή `> 0`). **Συνεπάγεται:** ενημέρωση των booking call-sites στα Φ3/Φ4 tests ώστε να σπέρνουν συνδρομή (Task 44).
+- **Μία ενεργή συνδρομή/χρήστη** _(2026-07-09)_: η ανάθεση ακυρώνει (Status=Cancelled) τυχόν προηγούμενη active. Το booking διαβάζει τη μοναδική active.
+- **`Booking.SubscriptionId` (nullable)** _(2026-07-09)_: το booking καταγράφει ποια συνδρομή κατανάλωσε → ακριβές refund. Νέα στήλη (migration).
+- **Consumption/refund driven από `RemainingSessions` null-ness** _(2026-07-09)_: `null` ⇒ Unlimited ⇒ κανένα decrement/refund· non-null ⇒ SessionPack ⇒ `-1` στο book, `+1` στο cancel. Δεν χρειάζεται lookup του PlanType στη ροή booking.
+- **Subscription row lock (`FOR UPDATE`)** _(2026-07-09)_ μέσα στο transaction: δύο ταυτόχρονες κρατήσεις του ίδιου χρήστη δεν καταναλώνουν 2× την τελευταία προπόνηση.
+- **Ανάθεση by email** _(2026-07-09)_: `POST /subscriptions {email, planId}` — ο server βρίσκει τον χρήστη στο tenant. Αποφεύγει users-list endpoint τώρα (πλήρες user management = Φ7).
+- **Assignment dates = server-computed** _(2026-07-09)_: `ValidFrom = τώρα`, `ValidTo = τώρα + plan.DurationDays`· `RemainingSessions = SessionPack ? plan.SessionsCount : null`.
+- **Cancel refund πάντα** στη Φ5 (η χρονική cancellation-policy μπαίνει Φ6).
+
+### Task 41: MembershipPlan + Subscription entities + Booking.SubscriptionId + migration
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Entities/Enums/PlanType.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Enums/SubscriptionStatus.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Models/MembershipPlan.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Models/Subscription.cs`
+- Modify: `backend/src/GymBooking.Core/Entities/Models/Booking.cs`
+- Modify: `backend/src/GymBooking.Data/AppDbContext.cs`
+- Test: `backend/tests/GymBooking.Tests/TenantIsolationTests.cs`
+
+- [ ] **Step 1:** Enums:
+
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum PlanType
+{
+    SessionPack,   // = 0
+    Unlimited,     // = 1
+}
+```
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum SubscriptionStatus
+{
+    Active,      // = 0
+    Cancelled,   // = 1
+}
+```
+
+- [ ] **Step 2:** `MembershipPlan.cs`:
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+
+namespace GymBooking.Core.Entities.Models;
+
+public class MembershipPlan
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public PlanType Type { get; set; }
+    public int SessionsCount { get; set; }   // σχετικό μόνο για SessionPack
+    public int DurationDays { get; set; }
+    public decimal Price { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+```
+
+- [ ] **Step 3:** `Subscription.cs`:
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+
+namespace GymBooking.Core.Entities.Models;
+
+public class Subscription
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid MembershipPlanId { get; set; }
+    public int? RemainingSessions { get; set; }   // null για Unlimited
+    public DateTime ValidFrom { get; set; }
+    public DateTime ValidTo { get; set; }
+    public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
+}
+```
+
+- [ ] **Step 4:** Στο `Booking.cs` πρόσθεσε: `public Guid? SubscriptionId { get; set; }`
+
+- [ ] **Step 5:** Στο `AppDbContext.cs`: DbSets + query filters:
+
+```csharp
+    public DbSet<MembershipPlan> MembershipPlans => Set<MembershipPlan>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+```
+```csharp
+        modelBuilder.Entity<MembershipPlan>().HasQueryFilter(p => p.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
+```
+
+- [ ] **Step 6 (test):** Πρόσθεσε στο `TenantIsolationTests.cs`:
+
+```csharp
+    [Fact]
+    public void Subscriptions_query_returns_only_current_tenant_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        using (var seedContext = CreateContext(dbName, new FakeCurrentTenant(tenantA)))
+        {
+            seedContext.Subscriptions.Add(new Subscription
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA, UserId = Guid.NewGuid(),
+                MembershipPlanId = Guid.NewGuid(), ValidFrom = DateTime.UtcNow, ValidTo = DateTime.UtcNow.AddDays(30),
+            });
+            seedContext.Subscriptions.Add(new Subscription
+            {
+                Id = Guid.NewGuid(), TenantId = tenantB, UserId = Guid.NewGuid(),
+                MembershipPlanId = Guid.NewGuid(), ValidFrom = DateTime.UtcNow, ValidTo = DateTime.UtcNow.AddDays(30),
+            });
+            seedContext.SaveChanges();
+        }
+
+        using var queryContext = CreateContext(dbName, new FakeCurrentTenant(tenantA));
+        var results = queryContext.Subscriptions.ToList();
+
+        Assert.Single(results);
+        Assert.Equal(tenantA, results[0].TenantId);
+    }
+```
+
+- [ ] **Step 7:** Verify: `cd backend && dotnet test --filter "FullyQualifiedName~TenantIsolationTests"` → PASS.
+
+- [ ] **Step 8:** Migration + apply (DB up):
+
+```bash
+cd backend
+dotnet ef migrations add AddSubscriptions -p src/GymBooking.Data -s src/GymBooking.Api
+dotnet ef database update -p src/GymBooking.Data -s src/GymBooking.Api
+```
+Expected: πίνακες `MembershipPlans`, `Subscriptions` + στήλη `SubscriptionId` στο `Bookings`.
+
+- [ ] **Step 9: Commit** `git add -A && git commit -m "feat: MembershipPlan/Subscription entities + Booking.SubscriptionId"`
+
+### Task 42: MembershipPlan CRUD (admin)
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Contracts/MembershipPlanContracts.cs`
+- Create: `backend/src/GymBooking.Api/Services/MembershipPlanService.cs`
+- Create: `backend/src/GymBooking.Api/Controllers/MembershipPlansController.cs`
+- Modify: `backend/src/GymBooking.Api/Program.cs` (DI)
+- Test: `backend/tests/GymBooking.Tests/MembershipPlansTests.cs`
+
+- [ ] **Step 1:** Contracts:
+
+```csharp
+namespace GymBooking.Core.Contracts;
+
+public record CreatePlanRequest(string Name, string Type, int SessionsCount, int DurationDays, decimal Price);
+public record PlanResponse(Guid Id, string Name, string Type, int SessionsCount, int DurationDays, decimal Price, bool IsActive);
+```
+
+- [ ] **Step 2:** `MembershipPlanService.cs`:
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace GymBooking.Api.Services;
+
+public class MembershipPlanService
+{
+    private readonly AppDbContext _dbContext;
+    private readonly ICurrentTenant _currentTenant;
+
+    public MembershipPlanService(AppDbContext dbContext, ICurrentTenant currentTenant)
+    {
+        _dbContext = dbContext;
+        _currentTenant = currentTenant;
+    }
+
+    /// <summary>Επιστρέφει null αν το Type δεν είναι έγκυρο ("SessionPack"/"Unlimited").</summary>
+    public async Task<MembershipPlan?> CreateAsync(string name, string type, int sessionsCount, int durationDays, decimal price)
+    {
+        if (!Enum.TryParse<PlanType>(type, out var planType))
+        {
+            return null;
+        }
+
+        var plan = new MembershipPlan
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _currentTenant.TenantId,
+            Name = name,
+            Type = planType,
+            SessionsCount = sessionsCount,
+            DurationDays = durationDays,
+            Price = price,
+            IsActive = true,
+        };
+        _dbContext.MembershipPlans.Add(plan);
+        await _dbContext.SaveChangesAsync();
+        return plan;
+    }
+
+    public async Task<List<MembershipPlan>> GetAllAsync() =>
+        await _dbContext.MembershipPlans.Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+
+    public async Task<bool> DeactivateAsync(Guid id)
+    {
+        var plan = await _dbContext.MembershipPlans.FirstOrDefaultAsync(p => p.Id == id);
+        if (plan is null)
+        {
+            return false;
+        }
+        plan.IsActive = false;
+        await _dbContext.SaveChangesAsync();
+        return true;
+    }
+}
+```
+
+- [ ] **Step 3:** `MembershipPlansController.cs` (Admin only):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Route("membership-plans")]
+[Authorize(Policy = Policies.RequireAdmin)]
+public class MembershipPlansController : ControllerBase
+{
+    private readonly MembershipPlanService _service;
+
+    public MembershipPlansController(MembershipPlanService service)
+    {
+        _service = service;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<PlanResponse>>> GetAll()
+    {
+        var plans = await _service.GetAllAsync();
+        return Ok(plans.Select(ToResponse));
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<PlanResponse>> Create([FromBody] CreatePlanRequest request)
+    {
+        var created = await _service.CreateAsync(request.Name, request.Type, request.SessionsCount, request.DurationDays, request.Price);
+        if (created is null)
+        {
+            return BadRequest($"Type must be '{nameof(GymBooking.Core.Entities.Enums.PlanType.SessionPack)}' or '{nameof(GymBooking.Core.Entities.Enums.PlanType.Unlimited)}'.");
+        }
+        return CreatedAtAction(nameof(GetAll), null, ToResponse(created));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var ok = await _service.DeactivateAsync(id);
+        return ok ? NoContent() : NotFound();
+    }
+
+    private static PlanResponse ToResponse(MembershipPlan p) =>
+        new(p.Id, p.Name, p.Type.ToString(), p.SessionsCount, p.DurationDays, p.Price, p.IsActive);
+}
+```
+
+- [ ] **Step 4:** DI: `builder.Services.AddScoped<MembershipPlanService>();`
+
+- [ ] **Step 5 (tests):** `MembershipPlansTests.cs` (InMemory `TestApiFactory` — χωρίς transactions). Αντέγραψε `CreateUserAsync`/`LoginAsync` (Φ2). Test: non-admin → 403· admin create SessionPack → appears:
+
+```csharp
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+public class MembershipPlansTests : IClassFixture<TestApiFactory>
+{
+    private readonly TestApiFactory _factory;
+
+    public MembershipPlansTests(TestApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    // (Αντέγραψε CreateUserAsync + LoginAsync από τα Φ2 test files.)
+
+    [Fact]
+    public async Task CreatePlan_as_non_admin_returns_403()
+    {
+        await CreateUserAsync("plan-instr@demo.gym", "Test1234!", Roles.Instructor);
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "plan-instr@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsJsonAsync("/membership-plans",
+            new CreatePlanRequest("10-pack", "SessionPack", 10, 60, 80m));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePlan_as_admin_then_appears_in_list()
+    {
+        await CreateUserAsync("plan-admin@demo.gym", "Test1234!", Roles.Admin);
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "plan-admin@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var create = await client.PostAsJsonAsync("/membership-plans",
+            new CreatePlanRequest("Unlimited Monthly", "Unlimited", 0, 30, 50m));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        var list = await client.GetFromJsonAsync<List<PlanResponse>>("/membership-plans");
+        Assert.Contains(list!, p => p.Name == "Unlimited Monthly" && p.Type == "Unlimited");
+    }
+}
+```
+
+- [ ] **Step 6:** Verify: `cd backend && dotnet test --filter "FullyQualifiedName~MembershipPlansTests"` → PASS.
+
+- [ ] **Step 7: Commit** `git commit -am "feat: MembershipPlan CRUD (admin) + tests"`
+
+### Task 43: SubscriptionService (assign + view)
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Contracts/SubscriptionContracts.cs`
+- Create: `backend/src/GymBooking.Api/Services/SubscriptionService.cs`
+- Create: `backend/src/GymBooking.Api/Controllers/SubscriptionsController.cs`
+- Modify: `backend/src/GymBooking.Api/Program.cs` (DI)
+- Test: `backend/tests/GymBooking.Tests/SubscriptionsTests.cs`
+
+- [ ] **Step 1:** Contracts:
+
+```csharp
+namespace GymBooking.Core.Contracts;
+
+public record AssignSubscriptionRequest(string Email, Guid PlanId);
+public record SubscriptionResponse(Guid Id, string PlanName, string Type, int? RemainingSessions, DateTime ValidFrom, DateTime ValidTo);
+```
+
+- [ ] **Step 2:** `SubscriptionService.cs` (η ανάθεση ακυρώνει προηγούμενη active — «μία τη φορά»):
+
+```csharp
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace GymBooking.Api.Services;
+
+public class SubscriptionService
+{
+    private readonly AppDbContext _dbContext;
+    private readonly ICurrentTenant _currentTenant;
+
+    public SubscriptionService(AppDbContext dbContext, ICurrentTenant currentTenant)
+    {
+        _dbContext = dbContext;
+        _currentTenant = currentTenant;
+    }
+
+    public async Task<(bool Ok, string? Error)> AssignAsync(string email, Guid planId)
+    {
+        // Identity default normalizer = ToUpperInvariant· ο έλεγχος tenant γίνεται από το query filter.
+        var normalizedEmail = email.ToUpperInvariant();
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail);
+        if (user is null)
+        {
+            return (false, "User not found in this tenant.");
+        }
+
+        var plan = await _dbContext.MembershipPlans.FirstOrDefaultAsync(p => p.Id == planId && p.IsActive);
+        if (plan is null)
+        {
+            return (false, "Plan not found.");
+        }
+
+        // "Μία ενεργή τη φορά": ακύρωσε τυχόν προηγούμενες active.
+        var active = await _dbContext.Subscriptions
+            .Where(s => s.UserId == user.Id && s.Status == SubscriptionStatus.Active)
+            .ToListAsync();
+        foreach (var s in active)
+        {
+            s.Status = SubscriptionStatus.Cancelled;
+        }
+
+        var now = DateTime.UtcNow;
+        _dbContext.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _currentTenant.TenantId,
+            UserId = user.Id,
+            MembershipPlanId = plan.Id,
+            RemainingSessions = plan.Type == PlanType.SessionPack ? plan.SessionsCount : (int?)null,
+            ValidFrom = now,
+            ValidTo = now.AddDays(plan.DurationDays),
+            Status = SubscriptionStatus.Active,
+        });
+        await _dbContext.SaveChangesAsync();
+        return (true, null);
+    }
+
+    public async Task<SubscriptionResponse?> GetActiveForUserAsync(Guid userId)
+    {
+        return await (
+            from s in _dbContext.Subscriptions
+            where s.UserId == userId && s.Status == SubscriptionStatus.Active
+            join p in _dbContext.MembershipPlans on s.MembershipPlanId equals p.Id
+            orderby s.ValidFrom descending
+            select new SubscriptionResponse(s.Id, p.Name, p.Type.ToString(), s.RemainingSessions, s.ValidFrom, s.ValidTo))
+            .FirstOrDefaultAsync();
+    }
+}
+```
+
+- [ ] **Step 3:** `SubscriptionsController.cs`:
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Route("subscriptions")]
+[Authorize]
+public class SubscriptionsController : ControllerBase
+{
+    private readonly SubscriptionService _service;
+
+    public SubscriptionsController(SubscriptionService service)
+    {
+        _service = service;
+    }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<SubscriptionResponse?>> GetMine()
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        return Ok(await _service.GetActiveForUserAsync(userId));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = Policies.RequireAdmin)]
+    public async Task<IActionResult> Assign([FromBody] AssignSubscriptionRequest request)
+    {
+        var (ok, error) = await _service.AssignAsync(request.Email, request.PlanId);
+        return ok ? NoContent() : BadRequest(error);
+    }
+}
+```
+
+- [ ] **Step 4:** DI: `builder.Services.AddScoped<SubscriptionService>();`
+
+- [ ] **Step 5 (tests):** `SubscriptionsTests.cs` (InMemory). Χρειάζεται admin + member στο **ίδιο** tenant → helper με ρητό tenantId (όπως στο `InstructorsTests`). Επίσης seed ενός plan μέσω scope:
+
+```csharp
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+public class SubscriptionsTests : IClassFixture<TestApiFactory>
+{
+    private readonly TestApiFactory _factory;
+
+    public SubscriptionsTests(TestApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task CreateUserInTenantAsync(Guid tenantId, string email, string password, params string[] roles)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+        foreach (var role in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new ApplicationRole { Name = role });
+            }
+        }
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserName = email, Email = email,
+            FirstName = "T", LastName = "U", EmailConfirmed = true,
+        };
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded) throw new InvalidOperationException(string.Join(", ", result.Errors.Select(e => e.Description)));
+        foreach (var role in roles) await userManager.AddToRoleAsync(user, role);
+    }
+
+    private async Task<Guid> SeedPlanAsync(Guid tenantId, PlanType type, int sessions, int durationDays)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var plan = new MembershipPlan { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Plan", Type = type, SessionsCount = sessions, DurationDays = durationDays, Price = 10m, IsActive = true };
+        db.MembershipPlans.Add(plan);
+        await db.SaveChangesAsync();
+        return plan.Id;
+    }
+
+    private static async Task<string> LoginAsync(HttpClient client, string email, string password)
+    {
+        var response = await client.PostAsJsonAsync("/auth/login", new LoginRequest(email, password));
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        return body!.AccessToken;
+    }
+
+    [Fact]
+    public async Task Admin_assigns_subscription_and_member_sees_it()
+    {
+        var tenantId = Guid.NewGuid();
+        await CreateUserInTenantAsync(tenantId, "sub-admin@demo.gym", "Test1234!", Roles.Admin);
+        await CreateUserInTenantAsync(tenantId, "sub-member@demo.gym", "Test1234!", Roles.User);
+        var planId = await SeedPlanAsync(tenantId, PlanType.SessionPack, sessions: 10, durationDays: 60);
+
+        var adminClient = _factory.CreateClient();
+        var adminToken = await LoginAsync(adminClient, "sub-admin@demo.gym", "Test1234!");
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var assign = await adminClient.PostAsJsonAsync("/subscriptions", new AssignSubscriptionRequest("sub-member@demo.gym", planId));
+        assign.EnsureSuccessStatusCode();
+
+        var memberClient = _factory.CreateClient();
+        var memberToken = await LoginAsync(memberClient, "sub-member@demo.gym", "Test1234!");
+        memberClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", memberToken);
+        var mine = await memberClient.GetFromJsonAsync<SubscriptionResponse>("/subscriptions/me");
+
+        Assert.NotNull(mine);
+        Assert.Equal(10, mine!.RemainingSessions);
+        Assert.Equal("SessionPack", mine.Type);
+    }
+}
+```
+
+- [ ] **Step 6:** Verify: `cd backend && dotnet test --filter "FullyQualifiedName~SubscriptionsTests"` → PASS.
+
+- [ ] **Step 7: Commit** `git commit -am "feat: subscription assignment (by email) + member view"`
+
+### Task 44: Integrate consumption + refund στον BookingService
+
+**Files:**
+- Modify: `backend/src/GymBooking.Core/Entities/Enums/BookingOutcome.cs`
+- Modify: `backend/src/GymBooking.Api/Services/BookingService.cs`
+- Create: `backend/tests/GymBooking.Tests/TestData.cs`
+- Modify: `backend/tests/GymBooking.Tests/BookingTests.cs`, `ScheduleTests.cs`, `BookingEndpointsTests.cs`
+- Create: `backend/tests/GymBooking.Tests/BookingSubscriptionTests.cs`
+
+- [ ] **Step 1:** Πρόσθεσε στο `BookingOutcome`: `NoSubscription,`
+
+- [ ] **Step 2:** Στον `BookingService.BookAsync`, **μετά** τον capacity check και **πριν** τη δημιουργία του booking, πρόσθεσε consumption. Το πλήρες ενημερωμένο τμήμα (από τον capacity check έως το commit):
+
+```csharp
+        if (session.BookedCount >= session.Capacity)
+        {
+            return (BookingOutcome.SessionFull, null);
+        }
+
+        // --- Φ5: consumption συνδρομής (κλείδωμα της γραμμής subscription μέσα στο ίδιο tx) ---
+        var subscription = await _dbContext.Subscriptions
+            .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""UserId"" = {userId} AND ""TenantId"" = {tenantId} AND ""Status"" = 0 ORDER BY ""ValidFrom"" DESC LIMIT 1 FOR UPDATE")
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync();
+
+        var now = DateTime.UtcNow;
+        var usable = subscription is not null
+            && subscription.ValidFrom <= now && now <= subscription.ValidTo
+            && (subscription.RemainingSessions == null || subscription.RemainingSessions > 0);
+        if (!usable)
+        {
+            return (BookingOutcome.NoSubscription, null);
+        }
+
+        if (subscription!.RemainingSessions != null)
+        {
+            subscription.RemainingSessions -= 1;   // SessionPack
+        }
+        // --- τέλος consumption ---
+
+        var booking = new Booking
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            UserId = userId,
+            ClassSessionId = classSessionId,
+            Status = BookingStatus.Confirmed,
+            CreatedAt = now,
+            SubscriptionId = subscription.Id,   // Φ5: για ακριβές refund
+        };
+        _dbContext.Bookings.Add(booking);
+        session.BookedCount += 1;
+
+        await _dbContext.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return (BookingOutcome.Success, booking);
+```
+
+- [ ] **Step 3:** Στον `BookingService.CancelAsync`, μετά το `booking.CancelledAt = DateTime.UtcNow;` και το decrement του session, πρόσθεσε refund:
+
+```csharp
+        // Φ5: refund θέσης προπόνησης στη συνδρομή που καταναλώθηκε (SessionPack μόνο).
+        if (booking.SubscriptionId is Guid subId)
+        {
+            var subscription = await _dbContext.Subscriptions
+                .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""Id"" = {subId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
+            if (subscription is not null && subscription.RemainingSessions != null)
+            {
+                subscription.RemainingSessions += 1;
+            }
+        }
+```
+(Πρόσεξε: αυτό μπαίνει **πριν** το `await _dbContext.SaveChangesAsync(); await tx.CommitAsync();` του `CancelAsync`.)
+
+- [ ] **Step 4:** `TestData.cs` — κοινός helper για συνδρομές (μειώνει duplication):
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+internal static class TestData
+{
+    public static async Task GiveUnlimitedAsync(IServiceProvider services, Guid tenantId, Guid userId)
+    {
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var now = DateTime.UtcNow;
+        var plan = new MembershipPlan { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Unlimited", Type = PlanType.Unlimited, DurationDays = 30, Price = 50m, IsActive = true };
+        db.MembershipPlans.Add(plan);
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = userId, MembershipPlanId = plan.Id,
+            RemainingSessions = null, ValidFrom = now.AddDays(-1), ValidTo = now.AddDays(30), Status = SubscriptionStatus.Active,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    public static async Task GiveSessionPackAsync(IServiceProvider services, Guid tenantId, Guid userId, int sessions)
+    {
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var now = DateTime.UtcNow;
+        var plan = new MembershipPlan { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Pack", Type = PlanType.SessionPack, SessionsCount = sessions, DurationDays = 30, Price = 30m, IsActive = true };
+        db.MembershipPlans.Add(plan);
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, UserId = userId, MembershipPlanId = plan.Id,
+            RemainingSessions = sessions, ValidFrom = now.AddDays(-1), ValidTo = now.AddDays(30), Status = SubscriptionStatus.Active,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    public static async Task<int?> GetRemainingAsync(IServiceProvider services, Guid tenantId, Guid userId)
+    {
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var sub = db.Subscriptions.Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active).OrderByDescending(s => s.ValidFrom).FirstOrDefault();
+        return sub?.RemainingSessions;
+    }
+}
+```
+
+- [ ] **Step 5:** **Ενημέρωσε τα υπάρχοντα booking tests** ώστε ο χρήστης να έχει συνδρομή πριν το `BookAsync` (αλλιώς → `NoSubscription`):
+  - `BookingTests.cs`: σε **κάθε** test που περιμένει επιτυχή κράτηση, πριν το πρώτο `BookAsync(tenantId, userId, ...)` πρόσθεσε `await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);`. Στο `Concurrent_bookings_never_exceed_capacity`, δώσε συνδρομή σε **κάθε** έναν από τους 12 χρήστες: δημιούργησε πρώτα τα `userIds`, κάνε loop `GiveUnlimitedAsync`, μετά fire τα `BookAsync`.
+  - `ScheduleTests.cs`: στο `Schedule_returns_only_this_week_with_booked_flag`, πριν το `booking.BookAsync(userId, ...)` πρόσθεσε `await TestData.GiveUnlimitedAsync(_factory.Services, seeded.TenantId, userId);`.
+  - `BookingEndpointsTests.cs`: στο `Member_books_session_then_it_appears_in_my_bookings` δώσε συνδρομή στον booker (`await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);`)· στο `Booking_full_session_returns_409` δώσε συνδρομή **και** στον booker **και** στον τυχαίο χρήστη που γεμίζει το session.
+
+- [ ] **Step 6 (νέα tests):** `BookingSubscriptionTests.cs` (Postgres). Reuse τα helpers μοτίβα του `BookingTests` (αντέγραψε `SeedSessionAsync`, `BookAsync`, `CancelAsync`, `GetSessionAsync`):
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class BookingSubscriptionTests
+{
+    private readonly PostgresApiFactory _factory;
+    public BookingSubscriptionTests(PostgresApiFactory factory) { _factory = factory; }
+
+    // (Αντέγραψε SeedSessionAsync/BookAsync/CancelAsync/GetSessionAsync από το BookingTests.)
+
+    [Fact]
+    public async Task Booking_without_subscription_returns_NoSubscription()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+
+        var (outcome, _) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        Assert.Equal(BookingOutcome.NoSubscription, outcome);
+    }
+
+    [Fact]
+    public async Task SessionPack_decrements_on_book_and_refunds_on_cancel()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var userId = Guid.NewGuid();
+        await TestData.GiveSessionPackAsync(_factory.Services, tenantId, userId, sessions: 3);
+
+        var (bookOutcome, booking) = await BookAsync(tenantId, userId, sessionId);
+        Assert.Equal(BookingOutcome.Success, bookOutcome);
+        Assert.Equal(2, await TestData.GetRemainingAsync(_factory.Services, tenantId, userId));
+
+        await CancelAsync(tenantId, userId, booking!.Id);
+        Assert.Equal(3, await TestData.GetRemainingAsync(_factory.Services, tenantId, userId)); // refund
+    }
+
+    [Fact]
+    public async Task Unlimited_does_not_decrement()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
+
+        var (outcome, _) = await BookAsync(tenantId, userId, sessionId);
+
+        Assert.Equal(BookingOutcome.Success, outcome);
+        Assert.Null(await TestData.GetRemainingAsync(_factory.Services, tenantId, userId));
+    }
+}
+```
+
+- [ ] **Step 7:** Verify ΟΛΑ → PASS: `cd backend && dotnet test`
+Expected: όλα PASS (τα ενημερωμένα Φ3/Φ4 tests + νέα Φ5).
+
+- [ ] **Step 8: Commit** `git commit -am "feat: subscription consumption + refund inside atomic booking"`
+
+### Task 45: Frontend — plan/subscription models + API services
+
+**Files:**
+- Modify: `frontend/libs/models/src/lib/models.ts`
+- Create: `frontend/libs/data-access/src/lib/membership-plan-api.service.ts`
+- Create: `frontend/libs/data-access/src/lib/subscription-api.service.ts`
+- Modify: `frontend/libs/data-access/src/index.ts`
+
+- [ ] **Step 1:** Πρόσθεσε στο `models.ts`:
+
+```typescript
+export type PlanType = 'SessionPack' | 'Unlimited';
+
+export interface MembershipPlan {
+  id: string;
+  name: string;
+  type: PlanType;
+  sessionsCount: number;
+  durationDays: number;
+  price: number;
+  isActive: boolean;
+}
+
+export interface CreatePlanRequest {
+  name: string;
+  type: PlanType;
+  sessionsCount: number;
+  durationDays: number;
+  price: number;
+}
+
+export interface AssignSubscriptionRequest {
+  email: string;
+  planId: string;
+}
+
+export interface Subscription {
+  id: string;
+  planName: string;
+  type: PlanType;
+  remainingSessions: number | null;
+  validFrom: string;
+  validTo: string;
+}
+```
+
+- [ ] **Step 2:** `membership-plan-api.service.ts`:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { CreatePlanRequest, MembershipPlan } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class MembershipPlanApiService {
+  private readonly http = inject(HttpClient);
+
+  getAll(): Observable<MembershipPlan[]> {
+    return this.http.get<MembershipPlan[]>('/membership-plans');
+  }
+
+  create(request: CreatePlanRequest): Observable<MembershipPlan> {
+    return this.http.post<MembershipPlan>('/membership-plans', request);
+  }
+}
+```
+
+- [ ] **Step 3:** `subscription-api.service.ts`:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { AssignSubscriptionRequest, Subscription } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class SubscriptionApiService {
+  private readonly http = inject(HttpClient);
+
+  getMine(): Observable<Subscription | null> {
+    return this.http.get<Subscription | null>('/subscriptions/me');
+  }
+
+  assign(request: AssignSubscriptionRequest): Observable<void> {
+    return this.http.post<void>('/subscriptions', request);
+  }
+}
+```
+
+- [ ] **Step 4:** Πρόσθεσε στο `data-access/src/index.ts`:
+
+```typescript
+export * from './lib/membership-plan-api.service';
+export * from './lib/subscription-api.service';
+```
+
+- [ ] **Step 5:** Verify: `cd frontend && npx nx run-many -t lint -p models data-access` → PASS.
+
+- [ ] **Step 6: Commit** `git commit -am "feat(fe): plan/subscription models + API services"`
+
+### Task 46: staff app — plans + ανάθεση συνδρομής
+
+**Files:**
+- Create: `frontend/apps/staff/src/app/memberships/memberships.ts`
+- Create: `frontend/apps/staff/src/app/memberships/memberships.html`
+- Modify: `frontend/apps/staff/src/app/app.routes.ts`
+- Modify: `frontend/apps/staff/src/app/dashboard/dashboard.html` (link)
+
+> Route προστατευμένη με `roleGuard('Admin')`.
+
+- [ ] **Step 1:** `memberships.ts`:
+
+```typescript
+import { Component, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatSelectModule } from '@angular/material/select';
+import { MembershipPlanApiService, SubscriptionApiService } from '@frontend/data-access';
+import { MembershipPlan } from '@frontend/models';
+
+@Component({
+  selector: 'app-memberships',
+  standalone: true,
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatListModule],
+  templateUrl: './memberships.html',
+})
+export class Memberships {
+  private readonly fb = inject(FormBuilder);
+  private readonly planApi = inject(MembershipPlanApiService);
+  private readonly subApi = inject(SubscriptionApiService);
+
+  protected readonly plans = signal<MembershipPlan[]>([]);
+  protected readonly message = signal<string | null>(null);
+
+  protected readonly planForm = this.fb.nonNullable.group({
+    name: ['', Validators.required],
+    type: ['SessionPack' as 'SessionPack' | 'Unlimited', Validators.required],
+    sessionsCount: [10, [Validators.required, Validators.min(0)]],
+    durationDays: [30, [Validators.required, Validators.min(1)]],
+    price: [50, [Validators.required, Validators.min(0)]],
+  });
+
+  protected readonly assignForm = this.fb.nonNullable.group({
+    email: ['', [Validators.required, Validators.email]],
+    planId: ['', Validators.required],
+  });
+
+  constructor() {
+    this.loadPlans();
+  }
+
+  private loadPlans(): void {
+    this.planApi.getAll().subscribe((x) => this.plans.set(x));
+  }
+
+  createPlan(): void {
+    if (this.planForm.invalid) {
+      this.planForm.markAllAsTouched();
+      return;
+    }
+    this.planApi.create(this.planForm.getRawValue()).subscribe(() => {
+      this.planForm.reset({ type: 'SessionPack', sessionsCount: 10, durationDays: 30, price: 50 });
+      this.loadPlans();
+    });
+  }
+
+  assign(): void {
+    if (this.assignForm.invalid) {
+      this.assignForm.markAllAsTouched();
+      return;
+    }
+    this.message.set(null);
+    this.subApi.assign(this.assignForm.getRawValue()).subscribe({
+      next: () => this.message.set('Η συνδρομή ανατέθηκε.'),
+      error: (err) => this.message.set(err?.error ?? 'Η ανάθεση απέτυχε.'),
+    });
+  }
+}
+```
+
+- [ ] **Step 2:** `memberships.html`:
+
+```html
+<div class="p-4 max-w-2xl">
+  <h1 class="text-2xl font-bold mb-4">Συνδρομές</h1>
+
+  <h2 class="text-xl font-bold mb-2">Νέο πακέτο</h2>
+  <form [formGroup]="planForm" (ngSubmit)="createPlan()" class="flex flex-col gap-4 mb-6">
+    <mat-form-field><mat-label>Όνομα</mat-label><input matInput formControlName="name" /></mat-form-field>
+    <mat-form-field>
+      <mat-label>Τύπος</mat-label>
+      <mat-select formControlName="type">
+        <mat-option value="SessionPack">SessionPack</mat-option>
+        <mat-option value="Unlimited">Unlimited</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field><mat-label>Προπονήσεις (SessionPack)</mat-label><input matInput type="number" formControlName="sessionsCount" /></mat-form-field>
+    <mat-form-field><mat-label>Διάρκεια (ημέρες)</mat-label><input matInput type="number" formControlName="durationDays" /></mat-form-field>
+    <mat-form-field><mat-label>Τιμή (€)</mat-label><input matInput type="number" formControlName="price" /></mat-form-field>
+    <button mat-raised-button color="primary" type="submit">Δημιουργία πακέτου</button>
+  </form>
+
+  <mat-list class="mb-6">
+    @for (p of plans(); track p.id) {
+      <mat-list-item>{{ p.name }} — {{ p.type }} — {{ p.durationDays }} ημέρες — {{ p.price }}€</mat-list-item>
+    } @empty {
+      <p class="text-gray-500">Δεν υπάρχουν πακέτα.</p>
+    }
+  </mat-list>
+
+  <h2 class="text-xl font-bold mb-2">Ανάθεση σε χρήστη</h2>
+  @if (message(); as m) { <p class="mb-2">{{ m }}</p> }
+  <form [formGroup]="assignForm" (ngSubmit)="assign()" class="flex flex-col gap-4">
+    <mat-form-field><mat-label>Email χρήστη</mat-label><input matInput formControlName="email" /></mat-form-field>
+    <mat-form-field>
+      <mat-label>Πακέτο</mat-label>
+      <mat-select formControlName="planId">
+        @for (p of plans(); track p.id) {
+          <mat-option [value]="p.id">{{ p.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <button mat-raised-button color="primary" type="submit">Ανάθεση</button>
+  </form>
+</div>
+```
+
+- [ ] **Step 3:** Route στο staff `app.routes.ts`:
+
+```typescript
+import { Memberships } from './memberships/memberships';
+```
+```typescript
+  { path: 'memberships', component: Memberships, canActivate: [roleGuard('Admin')] },
+```
+
+- [ ] **Step 4:** Link στο staff `dashboard.html`: `<a mat-button routerLink="/memberships">Συνδρομές</a>`.
+
+- [ ] **Step 5:** Verify: `cd frontend && npx nx lint staff && npx nx build staff` → PASS.
+
+- [ ] **Step 6: Commit** `git commit -am "feat(staff): membership plans + subscription assignment UI"`
+
+### Task 47: customer app — προβολή συνδρομής στο dashboard
+
+**Files:**
+- Modify: `frontend/apps/customer/src/app/dashboard/dashboard.ts`
+- Modify: `frontend/apps/customer/src/app/dashboard/dashboard.html`
+
+- [ ] **Step 1:** Στο `dashboard.ts` (που έγραψε το Task 39) πρόσθεσε φόρτωση συνδρομής:
+
+```typescript
+import { SubscriptionApiService } from '@frontend/data-access';
+import { Booking, Subscription } from '@frontend/models';
+```
+Μέσα στην κλάση:
+```typescript
+  private readonly subscriptionApi = inject(SubscriptionApiService);
+  protected readonly subscription = signal<Subscription | null>(null);
+```
+Στον constructor, πρόσθεσε:
+```typescript
+    this.subscriptionApi.getMine().subscribe((s) => this.subscription.set(s));
+```
+
+- [ ] **Step 2:** Στο `dashboard.html`, πάνω από τις «Επερχόμενες κρατήσεις», πρόσθεσε κάρτα συνδρομής:
+
+```html
+  <div class="mb-6 p-4 border rounded">
+    <h2 class="text-xl font-bold mb-2">Η συνδρομή μου</h2>
+    @if (subscription(); as sub) {
+      <p>{{ sub.planName }} ({{ sub.type }})</p>
+      @if (sub.type === 'SessionPack') {
+        <p>Υπόλοιπο προπονήσεων: <strong>{{ sub.remainingSessions }}</strong></p>
+      }
+      <p>Ισχύει έως: {{ sub.validTo | date: 'dd/MM/yyyy' }}</p>
+    } @else {
+      <p class="text-gray-500">Δεν έχεις ενεργή συνδρομή. Απευθύνσου στη γραμματεία.</p>
+    }
+  </div>
+```
+
+- [ ] **Step 3:** Verify: `cd frontend && npx nx lint customer && npx nx build customer` → PASS. (Optional e2e: admin (staff) φτιάχνει πακέτο + ανάθεση σε member → member dashboard δείχνει υπόλοιπο· κάθε κράτηση το μειώνει.)
+
+- [ ] **Step 4: Commit** `git commit -am "feat(customer): show active subscription on dashboard"`
+
+### Task 48: CI check + ενημέρωση progress
+
+**Files:** Modify `CLAUDE.md`
+
+- [ ] **Step 1:** CI (Docker up):
+
+```bash
+cd backend && dotnet build && dotnet test
+cd ../frontend && npx nx run-many -t lint build
+```
+Expected: όλα PASS.
+
+- [ ] **Step 2:** Στο `CLAUDE.md` → progress: τσέκαρε `[x] Φ5 — Subscriptions/plans + consumption` και ενημέρωσε «Τώρα δουλεύω / Επόμενο» σε **Φ6 — Waitlist + cancellation policy**.
+
+- [ ] **Step 3: Commit** `git commit -am "docs: mark Phase 5 complete"`
+
+---
+
+## PHASE 6–8: Outline (επέκταση σε αναλυτικά tasks όταν φτάνουμε)
 
 > Κάθε φάση = δικό της σετ bite-sized TDD tasks, που θα γραφτούν όταν ξεκινά (τότε τα paths/DTOs υπάρχουν). Εδώ μόνο το περίγραμμα + τα tricky σημεία.
 
-### Phase 3 — 🔥 Booking core (atomic) + tests (~14h)
-- [ ] `Booking`, `WaitlistEntry` entities + migrations.
-- [ ] **Atomic booking** (TDD, κρίσιμο): transaction + `SELECT … FOR UPDATE` (raw SQL **με parameters**) → check `bookedCount < capacity` → create booking → increment. Concurrency test (παράλληλες κρατήσεις → no overbooking).
-- [ ] Anti-double-booking (ίδιο session ή overlapping χρόνος).
-- [ ] Cancel + (επιστροφή θέσης). 
-- [ ] `customer` app: book/cancel UI πάνω σε session.
-
-### Phase 4 — Weekly schedule + φίλτρα + customer dashboard (~12h)
-- [ ] `GET /sessions?week=...&filters` (τύπος/instructor/μέρα).
-- [ ] `customer` app: εβδομαδιαίο πρόγραμμα (mobile-first), ένδειξη διαθεσιμότητας, φίλτρα.
-- [ ] Dashboard: επερχόμενες + ιστορικό κρατήσεων.
-
-### Phase 5 — Subscriptions/plans + consumption (~12h)
-- [ ] `MembershipPlan` (Type SessionPack|Unlimited), `Subscription` (+ migrations).
-- [ ] Booking consumption: SessionPack → decrement remaining (μέσα στο atomic transaction)· Unlimited → έλεγχος validFrom/validTo. Cancel → refund SessionPack αν εντός policy.
-- [ ] `staff` app (admin): δημιουργία plans + χειροκίνητη ανάθεση συνδρομής σε χρήστη.
-- [ ] `customer` app: προβολή υπολοίπου/ισχύος.
-
 ### Phase 6 — Waitlist + cancellation policy (~10h)
-- [ ] Join waitlist όταν γεμάτο· auto-promote #1 σε cancel (μέσα σε transaction).
+- [ ] `WaitlistEntry` entity + migration (μετακινήθηκε εδώ από τη Φ3 — logic & schema μαζί).
+- [ ] Join waitlist όταν γεμάτο· auto-promote #1 σε cancel (μέσα στο ίδιο atomic transaction του booking service — single point).
 - [ ] Cancellation policy: block ακύρωσης < `Tenant.CancellationHours` πριν.
 - [ ] (Προαιρετικά SHOULD: recurring template generation· background job για auto-promote/expiry — Hangfire/Quartz.)
 
@@ -1462,5 +4322,5 @@ Expected: όλα PASS.
 
 ## Self-review (έγινε)
 - **Spec coverage:** όλα τα MUST έχουν task (auth/ρόλοι/multi-tenant Φ1· CRUD Φ2· atomic booking Φ3· schedule/dashboard Φ4· cancel/anti-double Φ3· responsive Φ4/7). SHOULD αναφέρονται στις σχετικές φάσεις ως προαιρετικά. WON'T εκτός.
-- **Placeholders:** Setup+Φ1+Φ2 πλήρη με εντολές/κώδικα. Φ3–8 σκόπιμα outline (progressive elaboration για μεγάλο project) — όχι placeholders προς υλοποίηση τώρα.
+- **Placeholders:** Setup+Φ1+Φ2+Φ3+Φ4+Φ5 πλήρη με εντολές/κώδικα. Φ6–8 σκόπιμα outline (progressive elaboration για μεγάλο project) — όχι placeholders προς υλοποίηση τώρα.
 - **Συνέπεια ονομάτων:** `ICurrentTenant`, `AppDbContext`, `TokenService`, `InvitationService`, entities Tenant/ApplicationUser/Invitation/ClassType/ClassSession/Booking/WaitlistEntry/MembershipPlan/Subscription — σταθερά σε όλο το plan & spec.

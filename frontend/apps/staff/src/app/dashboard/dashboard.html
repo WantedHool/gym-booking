@@ -1,5 +1,7 @@
 <div class="min-h-screen flex flex-col items-center justify-center gap-4 p-4 text-center">
   <p class="text-lg">Καλωσήρθες!</p>
   <p class="text-sm text-gray-500">Ρόλοι: {{ authService.user()?.roles?.join(', ') }}</p>
+  <a mat-button routerLink="/class-types">Είδη μαθημάτων</a>
+  <a mat-button routerLink="/sessions">Ώρες μαθημάτων</a>
   <button mat-stroked-button (click)="logout()">Αποσύνδεση</button>
 </div>

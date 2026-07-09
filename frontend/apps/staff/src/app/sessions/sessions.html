@@ -1,0 +1,42 @@
+<h1 class="text-2xl font-bold m-4">Ώρες μαθημάτων (sessions)</h1>
+
+<form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4 m-4 max-w-md">
+  <mat-form-field>
+    <mat-label>Είδος μαθήματος</mat-label>
+    <mat-select formControlName="classTypeId">
+      @for (ct of classTypes(); track ct.id) {
+        <mat-option [value]="ct.id">{{ ct.name }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Έναρξη</mat-label>
+    <input matInput type="datetime-local" formControlName="startsAt" />
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Διάρκεια (λεπτά)</mat-label>
+    <input matInput type="number" formControlName="durationMinutes" />
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Χωρητικότητα</mat-label>
+    <input matInput type="number" formControlName="capacity" />
+  </mat-form-field>
+  @if (errorMessage(); as message) {
+    <p class="text-sm text-red-600">{{ message }}</p>
+  }
+
+  <button mat-raised-button color="primary" type="submit" [disabled]="submitting()">
+    Δημιουργία session
+  </button>
+</form>
+
+<mat-list class="m-4">
+  @for (s of sessions(); track s.id) {
+    <mat-list-item>
+      {{ s.classTypeName }} — {{ s.startsAt | date: 'dd/MM HH:mm' }} —
+      {{ s.instructorName }} — {{ s.bookedCount }}/{{ s.capacity }}
+    </mat-list-item>
+  } @empty {
+    <p class="m-4 text-gray-500">Δεν υπάρχουν sessions ακόμα.</p>
+  }
+</mat-list>
