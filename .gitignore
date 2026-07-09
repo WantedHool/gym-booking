@@ -18,3 +18,9 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Claude Code local config
+.claude/
+
+# Docs — generated HTML (source of truth = .md)
+docs/*.html

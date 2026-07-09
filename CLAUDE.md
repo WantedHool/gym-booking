@@ -52,7 +52,7 @@ npx nx run-many -t lint build    # ό,τι τρέχει το CI
 ## Πρόοδος (progress tracker)
 _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο chat ξέρει πού είσαι)_
 - [x] Setup (Nx monorepo, Postgres+Papercut, EF, backend layered, Serilog/Scalar/health) — _tenant infra μετακινήθηκε στη Φ1_
-- [ ] Φ1 — Auth + ρόλοι + invitation/registration
+- [x] Φ1 — Auth + ρόλοι + invitation/registration
 - [ ] Φ2 — ClassType/ClassSession CRUD + instructor
 - [ ] Φ3 — Booking core (atomic) + tests
 - [ ] Φ4 — Weekly schedule + φίλτρα + customer dashboard
@@ -61,8 +61,8 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [ ] Φ7 — Admin/staff dashboard + responsive QA
 - [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
 
-**Τώρα δουλεύω:** Setup ✅. Αποφάσεις Φ1 **κλειδωμένες** (βλ. plan → «Αποφάσεις Φάσης 1»). **Επόμενο: υλοποίηση Φ1 — Task 10** (base entities Tenant/ApplicationUser/Invitation + Identity + 1ο migration).
-> ⚙️ **Μοτίβο υλοποίησης:** ο **χρήστης γράφει** τον feature κώδικα, ο Claude **καθοδηγεί/εξηγεί/κάνει review** (όχι να γράφει τα πάντα). Πριν από κάθε ενέργεια → επιβεβαίωση.
+**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ (Tasks 10–16, ολοκληρωμένα 8–9 Ιουλίου). **Πρόοδος: ~26h / ~98h (~27%) — μπροστά από το χρονοδιάγραμμα.** **Επόμενο: Φ2 — ClassType/ClassSession CRUD + instructor** (θα επεκταθεί σε αναλυτικά tasks στο plan όταν ξεκινήσουμε).
+> ⚙️ **Μοτίβο υλοποίησης (από Φ2):** ο **Claude γράφει** τον κώδικα (+ εξηγεί), ο **χρήστης κάνει review**. Πριν από κάθε ενέργεια → επιβεβαίωση. Ποτέ commit (το κάνει ο χρήστης).
 > 🚀 **Πριν κωδικοποίηση:** `nvm use 20` (frontend) · `docker compose -f docker/docker-compose.yml up -d` (DB).
 
 ## Σημειώσεις / ανοιχτά θέματα

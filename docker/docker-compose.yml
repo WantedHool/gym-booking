@@ -22,8 +22,8 @@ services:
     container_name: gym-papercut
     restart: unless-stopped
     ports:
-      - "2525:25" # SMTP — εδώ θα "στέλνει" emails το API
-      - "8080:80" # Web UI — βλέπεις τα emails στο http://localhost:8080
+      - "2525:2525" # SMTP — εδώ θα "στέλνει" emails το API (η image ακούει εσωτερικά στο 2525, όχι στο 25)
+      - "8080:8080" # Web UI — βλέπεις τα emails στο http://localhost:8080 (η image ακούει εσωτερικά στο 8080, όχι στο 80)
 
 volumes:
   gym-postgres-data:
