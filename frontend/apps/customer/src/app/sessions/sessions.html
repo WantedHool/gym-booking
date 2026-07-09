@@ -1,0 +1,33 @@
+<h1 class="text-2xl font-bold m-4">Διαθέσιμα μαθήματα</h1>
+
+@if (message(); as m) {
+  <p class="m-4 text-red-600">{{ m }}</p>
+}
+
+<mat-list class="m-4">
+  @for (s of sessions(); track s.id) {
+    <mat-list-item>
+      {{ s.classTypeName }} — {{ s.startsAt | date: 'dd/MM HH:mm' }} —
+      {{ s.bookedCount }}/{{ s.capacity }}
+      <button mat-raised-button color="primary" class="ml-4"
+              [disabled]="s.bookedCount >= s.capacity || s.isCancelled"
+              (click)="book(s)">Κράτηση</button>
+    </mat-list-item>
+  } @empty {
+    <p class="text-gray-500">Δεν υπάρχουν διαθέσιμα μαθήματα.</p>
+  }
+</mat-list>
+
+<h2 class="text-xl font-bold m-4">Οι κρατήσεις μου</h2>
+<mat-list class="m-4">
+  @for (b of myBookings(); track b.id) {
+    <mat-list-item>
+      {{ b.classTypeName }} — {{ b.startsAt | date: 'dd/MM HH:mm' }} — {{ b.status }}
+      @if (b.status === 'Confirmed') {
+        <button mat-button color="warn" class="ml-4" (click)="cancel(b)">Ακύρωση</button>
+      }
+    </mat-list-item>
+  } @empty {
+    <p class="text-gray-500">Δεν έχεις κρατήσεις.</p>
+  }
+</mat-list>

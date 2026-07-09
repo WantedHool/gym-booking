@@ -54,14 +54,14 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [x] Setup (Nx monorepo, Postgres+Papercut, EF, backend layered, Serilog/Scalar/health) — _tenant infra μετακινήθηκε στη Φ1_
 - [x] Φ1 — Auth + ρόλοι + invitation/registration
 - [x] Φ2 — ClassType/ClassSession CRUD + instructor
-- [ ] Φ3 — Booking core (atomic) + tests
+- [x] Φ3 — Booking core (atomic) + tests
 - [ ] Φ4 — Weekly schedule + φίλτρα + customer dashboard
 - [ ] Φ5 — Subscriptions/plans + consumption
 - [ ] Φ6 — Waitlist + cancellation policy
 - [ ] Φ7 — Admin/staff dashboard + responsive QA
 - [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
 
-**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ + Φ2 ✅ (Tasks 17–24, ολοκληρωμένα 9 Ιουλίου). **Πρόοδος: ~38h / ~98h (~39%) — μπροστά από το χρονοδιάγραμμα.** **Επόμενο: Φ3 — Booking core (atomic) + tests** (θα επεκταθεί σε αναλυτικά tasks στο plan όταν ξεκινήσουμε).
+**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ + Φ2 ✅ + Φ3 ✅ (Tasks 25–34, ολοκληρωμένα 9 Ιουλίου· atomic booking με `SELECT...FOR UPDATE`, concurrency proof, anti-double-booking, cancel, HTTP API + customer UI). **Πρόοδος: ~52h / ~98h (~53%) — μπροστά από το χρονοδιάγραμμα.** **Επόμενο: Φ4 — Weekly schedule + φίλτρα + customer dashboard** (Tasks 35–40, ήδη αναλυτικά στο plan).
 > ⚙️ **Μοτίβο υλοποίησης (από Φ2):** ο **Claude γράφει** τον κώδικα (+ εξηγεί), ο **χρήστης κάνει review**. Πριν από κάθε ενέργεια → επιβεβαίωση. Ποτέ commit (το κάνει ο χρήστης).
 > 🚀 **Πριν κωδικοποίηση:** `nvm use 20` (frontend) · `docker compose -f docker/docker-compose.yml up -d` (DB).
 

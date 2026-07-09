@@ -57,3 +57,16 @@ export interface CreateClassSessionRequest {
   durationMinutes: number;
   capacity: number;
 }
+
+export interface Booking {
+  id: string;
+  classSessionId: string;
+  classTypeName: string;
+  startsAt: string; // ISO UTC
+  status: string;   // 'Confirmed' | 'Cancelled'
+  createdAt: string;
+}
+
+export interface CreateBookingRequest {
+  classSessionId: string;
+}

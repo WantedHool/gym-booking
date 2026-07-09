@@ -8,7 +8,7 @@ namespace GymBooking.Api.Controllers;
 
 [ApiController]
 [Route("class-sessions")]
-[Authorize(Policy = Policies.RequireInstructor)]
+[Authorize]
 public class ClassSessionsController : ControllerBase
 {
     private readonly ClassSessionService _service;
@@ -32,6 +32,7 @@ public class ClassSessionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = Policies.RequireInstructor)]
     public async Task<ActionResult<ClassSessionResponse>> Create([FromBody] CreateClassSessionRequest request)
     {
         var currentUserId = Guid.Parse(User.FindFirst("sub")!.Value);
@@ -52,6 +53,7 @@ public class ClassSessionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Policy = Policies.RequireInstructor)]
     public async Task<IActionResult> Cancel(Guid id)
     {
         var ok = await _service.CancelAsync(id);
