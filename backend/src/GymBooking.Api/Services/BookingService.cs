@@ -20,107 +20,120 @@ public class BookingService
 
     public async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid userId, Guid classSessionId)
     {
-        var tenantId = _currentTenant.TenantId;
-
-        await using var tx = await _dbContext.Database.BeginTransactionAsync();
-
-        // Κλειδώνει τη ΣΕΙΡΑ του session μέχρι το COMMIT — no overbooking σε ταυτόχρονες κρατήσεις.
-        var session = await _dbContext.ClassSessions
-            .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {classSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .FirstOrDefaultAsync();
-
-        if (session is null || !session.IsActive)
+        // Το Program.cs ενεργοποιεί EnableRetryOnFailure στο Npgsql provider (retry σε παροδικά
+        // connection errors). Όταν υπάρχει retrying execution strategy, η EF Core ΑΠΑΓΟΡΕΥΕΙ
+        // χειροκίνητο Database.BeginTransactionAsync() εκτός αν όλο το transaction τρέχει μέσα
+        // στο strategy.ExecuteAsync — αλλιώς ρίχνει InvalidOperationException at runtime
+        // (δεν το πιάνει το InMemory/no-retry test harness, μόνο πραγματικό Postgres+retry config).
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<(BookingOutcome Outcome, Booking? Booking)>(async () =>
         {
-            return (BookingOutcome.SessionNotFound, null);
-        }
+            var tenantId = _currentTenant.TenantId;
 
-        if (session.IsCancelled)
-        {
-            return (BookingOutcome.SessionCancelled, null);
-        }
+            await using var tx = await _dbContext.Database.BeginTransactionAsync();
 
-        var alreadyBooked = await _dbContext.Bookings
-            .AnyAsync(b => b.UserId == userId && b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed);
-        if (alreadyBooked)
-        {
-            return (BookingOutcome.AlreadyBooked, null);
-        }
+            // Κλειδώνει τη ΣΕΙΡΑ του session μέχρι το COMMIT — no overbooking σε ταυτόχρονες κρατήσεις.
+            var session = await _dbContext.ClassSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {classSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
 
-        // Overlap: φέρνουμε τα confirmed sessions του χρήστη στη μνήμη (λίγα) — το AddMinutes γίνεται σε C#.
-        var newStart = session.StartsAt;
-        var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
-        var userSessions = await (
-            from b in _dbContext.Bookings
-            where b.UserId == userId && b.Status == BookingStatus.Confirmed
-            join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
-            select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
+            if (session is null || !session.IsActive)
+            {
+                return (BookingOutcome.SessionNotFound, null);
+            }
 
-        var overlaps = userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
-        if (overlaps)
-        {
-            return (BookingOutcome.TimeConflict, null);
-        }
+            if (session.IsCancelled)
+            {
+                return (BookingOutcome.SessionCancelled, null);
+            }
 
-        if (session.BookedCount >= session.Capacity)
-        {
-            return (BookingOutcome.SessionFull, null);
-        }
+            var alreadyBooked = await _dbContext.Bookings
+                .AnyAsync(b => b.UserId == userId && b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed);
+            if (alreadyBooked)
+            {
+                return (BookingOutcome.AlreadyBooked, null);
+            }
 
-        var booking = new Booking
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            UserId = userId,
-            ClassSessionId = classSessionId,
-            Status = BookingStatus.Confirmed,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.Bookings.Add(booking);
-        session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount
+            // Overlap: φέρνουμε τα confirmed sessions του χρήστη στη μνήμη (λίγα) — το AddMinutes γίνεται σε C#.
+            var newStart = session.StartsAt;
+            var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
+            var userSessions = await (
+                from b in _dbContext.Bookings
+                where b.UserId == userId && b.Status == BookingStatus.Confirmed
+                join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
+                select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
 
-        await _dbContext.SaveChangesAsync();
-        await tx.CommitAsync();
+            var overlaps = userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
+            if (overlaps)
+            {
+                return (BookingOutcome.TimeConflict, null);
+            }
 
-        return (BookingOutcome.Success, booking);
+            if (session.BookedCount >= session.Capacity)
+            {
+                return (BookingOutcome.SessionFull, null);
+            }
+
+            var booking = new Booking
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                ClassSessionId = classSessionId,
+                Status = BookingStatus.Confirmed,
+                CreatedAt = DateTime.UtcNow,
+            };
+            _dbContext.Bookings.Add(booking);
+            session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount
+
+            await _dbContext.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return (BookingOutcome.Success, booking);
+        });
     }
 
     public async Task<(BookingOutcome Outcome, Booking? Booking)> CancelAsync(Guid userId, Guid bookingId)
     {
-        var tenantId = _currentTenant.TenantId;
-
-        await using var tx = await _dbContext.Database.BeginTransactionAsync();
-
-        var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId);
-        if (booking is null || booking.UserId != userId)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<(BookingOutcome Outcome, Booking? Booking)>(async () =>
         {
-            return (BookingOutcome.SessionNotFound, null); // ownership: μη-δική-σου → σαν να μην υπάρχει
-        }
+            var tenantId = _currentTenant.TenantId;
 
-        if (booking.Status == BookingStatus.Cancelled)
-        {
-            return (BookingOutcome.Success, booking); // idempotent
-        }
+            await using var tx = await _dbContext.Database.BeginTransactionAsync();
 
-        var session = await _dbContext.ClassSessions
-            .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {booking.ClassSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
-            .IgnoreQueryFilters()
-            .AsTracking()
-            .FirstOrDefaultAsync();
+            var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId);
+            if (booking is null || booking.UserId != userId)
+            {
+                return (BookingOutcome.SessionNotFound, null); // ownership: μη-δική-σου → σαν να μην υπάρχει
+            }
 
-        booking.Status = BookingStatus.Cancelled;
-        booking.CancelledAt = DateTime.UtcNow;
+            if (booking.Status == BookingStatus.Cancelled)
+            {
+                return (BookingOutcome.Success, booking); // idempotent
+            }
 
-        if (session is not null && session.BookedCount > 0)
-        {
-            session.BookedCount -= 1; // επιστροφή θέσης
-        }
+            var session = await _dbContext.ClassSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {booking.ClassSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
 
-        await _dbContext.SaveChangesAsync();
-        await tx.CommitAsync();
+            booking.Status = BookingStatus.Cancelled;
+            booking.CancelledAt = DateTime.UtcNow;
 
-        return (BookingOutcome.Success, booking);
+            if (session is not null && session.BookedCount > 0)
+            {
+                session.BookedCount -= 1; // επιστροφή θέσης
+            }
+
+            await _dbContext.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return (BookingOutcome.Success, booking);
+        });
     }
 
     public async Task<List<BookingResponse>> GetMineAsync(Guid userId)

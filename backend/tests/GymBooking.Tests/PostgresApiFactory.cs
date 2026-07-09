@@ -37,7 +37,12 @@ public class PostgresApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.ConfigureServices(services =>
         {
-            services.AddDbContext<AppDbContext>(o => o.UseNpgsql(_db.GetConnectionString()));
+            // EnableRetryOnFailure matches το production Program.cs — χωρίς αυτό, tests δεν
+            // εντοπίζουν bugs που αφορούν το EF Core execution-strategy (π.χ. χειροκίνητο
+            // BeginTransactionAsync χωρίς CreateExecutionStrategy().ExecuteAsync wrapper).
+            services.AddDbContext<AppDbContext>(o => o.UseNpgsql(
+                _db.GetConnectionString(),
+                npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 
             // Χωρίς πραγματικό SMTP στα tests.
             services.AddSingleton<FakeEmailSender>();
