@@ -1,34 +1,47 @@
-<a mat-button routerLink="/dashboard" class="m-4">← Πίσω στην αρχική</a>
-<h1 class="text-2xl font-bold m-4">Διαθέσιμα μαθήματα</h1>
+<h1 class="text-2xl font-bold text-white mb-4">Διαθέσιμα μαθήματα</h1>
 
 @if (message(); as m) {
-  <p class="m-4 text-red-600">{{ m }}</p>
+  <p class="text-red-400 mb-4">{{ m }}</p>
 }
 
-<mat-list class="m-4">
+<div class="flex flex-col gap-3 mb-8">
   @for (s of sessions(); track s.id) {
-    <mat-list-item>
-      {{ s.classTypeName }} — {{ s.startsAt | date: 'dd/MM HH:mm' }} —
-      {{ s.bookedCount }}/{{ s.capacity }}
-      <button mat-raised-button color="primary" class="ml-4"
-              [disabled]="s.bookedCount >= s.capacity || s.isCancelled"
-              (click)="book(s)">Κράτηση</button>
-    </mat-list-item>
+    <div class="flex items-center justify-between gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4">
+      <div class="text-sm text-white">
+        <div class="font-medium">{{ s.classTypeName }}</div>
+        <div class="text-[var(--app-text-secondary)]">
+          {{ s.startsAt | date: 'dd/MM HH:mm' }} — {{ s.bookedCount }}/{{ s.capacity }}
+        </div>
+      </div>
+      <button
+        mat-flat-button
+        color="primary"
+        [disabled]="s.bookedCount >= s.capacity || s.isCancelled"
+        (click)="book(s)"
+      >
+        Κράτηση
+      </button>
+    </div>
   } @empty {
-    <p class="text-gray-500">Δεν υπάρχουν διαθέσιμα μαθήματα.</p>
+    <p class="text-[var(--app-text-secondary)]">Δεν υπάρχουν διαθέσιμα μαθήματα.</p>
   }
-</mat-list>
+</div>
 
-<h2 class="text-xl font-bold m-4">Οι κρατήσεις μου</h2>
-<mat-list class="m-4">
+<h2 class="text-xl font-bold text-white mb-4">Οι κρατήσεις μου</h2>
+<div class="flex flex-col gap-3">
   @for (b of myBookings(); track b.id) {
-    <mat-list-item>
-      {{ b.classTypeName }} — {{ b.startsAt | date: 'dd/MM HH:mm' }} — {{ b.status }}
+    <div class="flex items-center justify-between gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4">
+      <div class="text-sm text-white">
+        <div class="font-medium">{{ b.classTypeName }}</div>
+        <div class="text-[var(--app-text-secondary)]">
+          {{ b.startsAt | date: 'dd/MM HH:mm' }} — {{ b.status }}
+        </div>
+      </div>
       @if (b.status === 'Confirmed') {
-        <button mat-button color="warn" class="ml-4" (click)="cancel(b)">Ακύρωση</button>
+        <button mat-button color="warn" (click)="cancel(b)">Ακύρωση</button>
       }
-    </mat-list-item>
+    </div>
   } @empty {
-    <p class="text-gray-500">Δεν έχεις κρατήσεις.</p>
+    <p class="text-[var(--app-text-secondary)]">Δεν έχεις κρατήσεις.</p>
   }
-</mat-list>
+</div>

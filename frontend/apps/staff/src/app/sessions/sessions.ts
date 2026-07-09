@@ -4,25 +4,14 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatListModule } from '@angular/material/list';
 import { MatSelectModule } from '@angular/material/select';
-import { RouterLink } from '@angular/router';
 import { ClassSessionApiService, ClassTypeApiService } from '@frontend/data-access';
 import { ClassSession, ClassType } from '@frontend/models';
 
 @Component({
   selector: 'app-sessions',
   standalone: true,
-  imports: [
-    ReactiveFormsModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatButtonModule,
-    MatListModule,
-    DatePipe,
-    RouterLink,
-  ],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, DatePipe],
   templateUrl: './sessions.html',
 })
 export class Sessions {

@@ -1,36 +1,38 @@
-<a mat-button routerLink="/dashboard" class="m-4">← Πίσω στην αρχική</a>
-<h1 class="text-2xl font-bold m-4">Είδη μαθημάτων</h1>
+<h1 class="text-2xl font-bold text-white mb-4">Είδη μαθημάτων</h1>
 
-<form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4 m-4 max-w-md">
-  <mat-form-field>
+<form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4 max-w-md mb-8">
+  <mat-form-field appearance="outline">
     <mat-label>Όνομα</mat-label>
     <input matInput formControlName="name" />
   </mat-form-field>
-  <mat-form-field>
+  <mat-form-field appearance="outline">
     <mat-label>Περιγραφή</mat-label>
     <input matInput formControlName="description" />
   </mat-form-field>
-  <mat-form-field>
+  <mat-form-field appearance="outline">
     <mat-label>Διάρκεια (λεπτά)</mat-label>
     <input matInput type="number" formControlName="defaultDurationMinutes" />
   </mat-form-field>
-  <mat-form-field>
+  <mat-form-field appearance="outline">
     <mat-label>Χωρητικότητα</mat-label>
     <input matInput type="number" formControlName="defaultCapacity" />
   </mat-form-field>
   @if (errorMessage(); as message) {
-    <p class="text-sm text-red-600">{{ message }}</p>
+    <p class="text-sm text-red-400">{{ message }}</p>
   }
 
-  <button mat-raised-button color="primary" type="submit" [disabled]="submitting()">
+  <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
     Προσθήκη
   </button>
 </form>
 
-<mat-list class="m-4">
+<div class="flex flex-col gap-3 max-w-md">
   @for (ct of classTypes(); track ct.id) {
-    <mat-list-item>{{ ct.name }} — {{ ct.defaultDurationMinutes }}′ / {{ ct.defaultCapacity }} θέσεις</mat-list-item>
+    <div class="bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 text-sm text-white">
+      <div class="font-medium">{{ ct.name }}</div>
+      <div class="text-[var(--app-text-secondary)]">{{ ct.defaultDurationMinutes }}′ / {{ ct.defaultCapacity }} θέσεις</div>
+    </div>
   } @empty {
-    <p class="m-4 text-gray-500">Δεν υπάρχουν είδη μαθημάτων ακόμα.</p>
+    <p class="text-[var(--app-text-secondary)]">Δεν υπάρχουν είδη μαθημάτων ακόμα.</p>
   }
-</mat-list>
+</div>

@@ -1,14 +1,14 @@
 <div class="min-h-screen flex">
-  <div class="hidden lg:flex flex-1 items-center justify-center bg-[var(--mat-sys-primary)] text-white p-12">
+  <div class="hidden lg:flex flex-1 items-center justify-center bg-[var(--mat-sys-primary)] text-black p-12">
     <div class="max-w-md text-center">
       <h1 class="text-3xl font-semibold mb-2">Demo Gym</h1>
-      <p class="text-white/80">Πάνελ διαχείρισης προσωπικού</p>
+      <p class="text-black/70">Πάνελ διαχείρισης προσωπικού</p>
     </div>
   </div>
 
-  <div class="flex flex-1 items-center justify-center p-4 lg:p-12">
+  <div class="flex flex-1 items-center justify-center p-4 lg:p-12 bg-[var(--app-bg-page)]">
     <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
-      <h2 class="text-xl font-medium text-center">Σύνδεση</h2>
+      <h2 class="text-xl font-medium text-center text-white">Σύνδεση</h2>
 
       <mat-form-field appearance="outline" class="w-full">
         <mat-label>Email</mat-label>
@@ -21,7 +21,7 @@
       </mat-form-field>
 
       @if (errorMessage(); as message) {
-        <p class="text-sm text-red-600">{{ message }}</p>
+        <p class="text-sm text-red-400">{{ message }}</p>
       }
 
       <button mat-flat-button color="primary" type="submit" [disabled]="submitting()" class="w-full">

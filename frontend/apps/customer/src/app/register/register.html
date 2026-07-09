@@ -1,34 +1,43 @@
-<div class="min-h-screen flex items-center justify-center p-4">
-  @if (invalidLink) {
-    <p class="text-sm text-red-600">Μη έγκυρο link εγγραφής.</p>
-  } @else {
-    <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
-      <h1 class="text-xl font-medium text-center">Ολοκλήρωση εγγραφής</h1>
+<div class="min-h-screen flex">
+  <div class="hidden lg:flex flex-1 items-center justify-center bg-[var(--mat-sys-primary)] text-black p-12">
+    <div class="max-w-md text-center">
+      <h1 class="text-3xl font-semibold mb-2">Demo Gym</h1>
+      <p class="text-black/70">Καλωσόρισες στην ομάδα.</p>
+    </div>
+  </div>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Όνομα</mat-label>
-        <input matInput formControlName="firstName" autocomplete="given-name" />
-      </mat-form-field>
+  <div class="flex flex-1 items-center justify-center p-4 lg:p-12 bg-[var(--app-bg-page)]">
+    @if (invalidLink) {
+      <p class="text-sm text-red-400">Μη έγκυρο link εγγραφής.</p>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
+        <h2 class="text-xl font-medium text-center text-white">Ολοκλήρωση εγγραφής</h2>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Επώνυμο</mat-label>
-        <input matInput formControlName="lastName" autocomplete="family-name" />
-      </mat-form-field>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Όνομα</mat-label>
+          <input matInput formControlName="firstName" autocomplete="given-name" />
+        </mat-form-field>
 
-      <mat-form-field appearance="outline" class="w-full">
-        <mat-label>Κωδικός</mat-label>
-        <input matInput type="password" formControlName="password" autocomplete="new-password" />
-        <mat-hint>Τουλάχιστον 6 χαρακτήρες, ένα κεφαλαίο, ένα πεζό, έναν αριθμό και έναν ειδικό χαρακτήρα.</mat-hint>
-        <mat-error>Τουλάχιστον 6 χαρακτήρες, ένα κεφαλαίο, ένα πεζό, έναν αριθμό και έναν ειδικό χαρακτήρα.</mat-error>
-      </mat-form-field>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Επώνυμο</mat-label>
+          <input matInput formControlName="lastName" autocomplete="family-name" />
+        </mat-form-field>
 
-      @if (errorMessage(); as message) {
-        <p class="text-sm text-red-600">{{ message }}</p>
-      }
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Κωδικός</mat-label>
+          <input matInput type="password" formControlName="password" autocomplete="new-password" />
+          <mat-hint>Τουλάχιστον 6 χαρακτήρες, ένα κεφαλαίο, ένα πεζό, έναν αριθμό και έναν ειδικό χαρακτήρα.</mat-hint>
+          <mat-error>Τουλάχιστον 6 χαρακτήρες, ένα κεφαλαίο, ένα πεζό, έναν αριθμό και έναν ειδικό χαρακτήρα.</mat-error>
+        </mat-form-field>
 
-      <button mat-flat-button color="primary" type="submit" [disabled]="submitting()" class="w-full">
-        {{ submitting() ? 'Υποβολή...' : 'Δημιουργία λογαριασμού' }}
-      </button>
-    </form>
-  }
+        @if (errorMessage(); as message) {
+          <p class="text-sm text-red-400">{{ message }}</p>
+        }
+
+        <button mat-flat-button color="primary" type="submit" [disabled]="submitting()" class="w-full">
+          {{ submitting() ? 'Υποβολή...' : 'Δημιουργία λογαριασμού' }}
+        </button>
+      </form>
+    }
+  </div>
 </div>

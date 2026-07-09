@@ -3,15 +3,13 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatListModule } from '@angular/material/list';
-import { RouterLink } from '@angular/router';
 import { ClassTypeApiService } from '@frontend/data-access';
 import { ClassType } from '@frontend/models';
 
 @Component({
   selector: 'app-class-types',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatListModule, RouterLink],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule],
   templateUrl: './class-types.html',
 })
 export class ClassTypes {

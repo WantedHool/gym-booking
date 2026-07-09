@@ -1,38 +1,57 @@
-
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
 
 html {
   height: 100%;
   @include mat.theme((
     color: (
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
+      theme-type: dark,
+      primary: mat.$chartreuse-palette,
+      tertiary: mat.$chartreuse-palette,
     ),
     typography: Roboto,
     density: 0,
   ));
 }
 
-body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
+:root {
+  --app-bg-page: #15161a;
+  --app-bg-surface: #1e2026;
+  --app-border: #33353c;
+  --app-text-secondary: #8a8d95;
+  --app-accent: #c6ff3d;
+  --mat-sys-primary: var(--app-accent);
+}
 
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
-  background-color: var(--mat-sys-surface);
+body {
+  color-scheme: dark;
+  background-color: var(--app-bg-page);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
-
-  // Reset the user agent margin.
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
+
+// Πιο στρογγυλά, "γλυκά" κουμπιά + λίγο style στα inputs
+.mat-mdc-unelevated-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button,
+.mat-mdc-button {
+  border-radius: 999px !important;
+}
+
+.mat-mdc-unelevated-button,
+.mat-mdc-raised-button {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4) !important;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.mat-mdc-unelevated-button:hover,
+.mat-mdc-raised-button:hover {
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.5) !important;
+  transform: translateY(-1px);
+}
+
+.mat-mdc-form-field-flex {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}

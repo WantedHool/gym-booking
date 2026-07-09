@@ -1,15 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
-import { MatListModule } from '@angular/material/list';
-import { RouterLink } from '@angular/router';
 import { BookingApiService, ClassSessionApiService } from '@frontend/data-access';
 import { Booking, ClassSession } from '@frontend/models';
 
 @Component({
   selector: 'app-sessions',
   standalone: true,
-  imports: [DatePipe, MatButtonModule, MatListModule, RouterLink],
+  imports: [DatePipe, MatButtonModule],
   templateUrl: './sessions.html',
 })
 export class Sessions {

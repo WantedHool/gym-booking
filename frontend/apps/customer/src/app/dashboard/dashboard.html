@@ -1,6 +1,14 @@
-<div class="min-h-screen flex flex-col items-center justify-center gap-4 p-4 text-center">
-  <p class="text-lg">Καλωσήρθες!</p>
-  <p class="text-sm text-gray-500">Ρόλοι: {{ authService.user()?.roles?.join(', ') }}</p>
-  <a mat-button routerLink="/sessions">Μαθήματα</a>
-  <button mat-stroked-button (click)="logout()">Αποσύνδεση</button>
+<div class="flex flex-col gap-4">
+  <h1 class="text-2xl font-bold text-white">Καλωσήρθες!</h1>
+  <p class="text-sm text-[var(--app-text-secondary)]">
+    Ρόλοι: {{ authService.user()?.roles?.join(', ') }}
+  </p>
+
+  <a
+    routerLink="/sessions"
+    class="flex items-center gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 hover:border-[var(--app-accent)] transition-colors"
+  >
+    <mat-icon class="text-[var(--app-accent)]">event</mat-icon>
+    <span class="text-white">Μαθήματα</span>
+  </a>
 </div>
