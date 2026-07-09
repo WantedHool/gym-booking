@@ -90,6 +90,45 @@ public class TenantIsolationTests
         Assert.Equal(tenantA, results[0].TenantId);
     }
 
+    [Fact]
+    public void ClassSessions_query_returns_only_current_tenant_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        using (var seedContext = CreateContext(dbName, new FakeCurrentTenant(tenantA)))
+        {
+            seedContext.ClassSessions.Add(new ClassSession
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantA,
+                ClassTypeId = Guid.NewGuid(),
+                InstructorId = Guid.NewGuid(),
+                StartsAt = DateTime.UtcNow.AddDays(1),
+                DurationMinutes = 60,
+                Capacity = 10,
+            });
+            seedContext.ClassSessions.Add(new ClassSession
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantB,
+                ClassTypeId = Guid.NewGuid(),
+                InstructorId = Guid.NewGuid(),
+                StartsAt = DateTime.UtcNow.AddDays(1),
+                DurationMinutes = 45,
+                Capacity = 8,
+            });
+            seedContext.SaveChanges();
+        }
+
+        using var queryContext = CreateContext(dbName, new FakeCurrentTenant(tenantA));
+        var results = queryContext.ClassSessions.ToList();
+
+        Assert.Single(results);
+        Assert.Equal(tenantA, results[0].TenantId);
+    }
+
     private class FakeCurrentTenant : ICurrentTenant
     {
         public FakeCurrentTenant(Guid tenantId)

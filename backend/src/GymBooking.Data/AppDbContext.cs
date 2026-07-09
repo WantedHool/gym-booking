@@ -20,6 +20,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<ClassType> ClassTypes => Set<ClassType>();
+    public DbSet<ClassSession> ClassSessions => Set<ClassSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,5 +29,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
 
         modelBuilder.Entity<ApplicationUser>().HasQueryFilter(u => u.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<Invitation>().HasQueryFilter(i => i.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<ClassType>().HasQueryFilter(c => c.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<ClassSession>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
     }
 }
