@@ -24,3 +24,5 @@ Thumbs.db
 
 # Docs — generated HTML (source of truth = .md)
 docs/*.html
+
+.superpowers/

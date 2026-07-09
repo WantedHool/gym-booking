@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatSelectModule } from '@angular/material/select';
+import { RouterLink } from '@angular/router';
 import { ClassSessionApiService, ClassTypeApiService } from '@frontend/data-access';
 import { ClassSession, ClassType } from '@frontend/models';
 
@@ -20,6 +21,7 @@ import { ClassSession, ClassType } from '@frontend/models';
     MatButtonModule,
     MatListModule,
     DatePipe,
+    RouterLink,
   ],
   templateUrl: './sessions.html',
 })
