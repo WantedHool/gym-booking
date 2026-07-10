@@ -9,10 +9,20 @@
       }
     </mat-select>
   </mat-form-field>
-  <mat-form-field appearance="outline">
-    <mat-label>Έναρξη</mat-label>
-    <input matInput type="datetime-local" formControlName="startsAt" />
-  </mat-form-field>
+  <div class="flex gap-4">
+    <mat-form-field appearance="outline" class="flex-1">
+      <mat-label>Ημερομηνία</mat-label>
+      <input matInput [matDatepicker]="picker" formControlName="startsDate" (click)="picker.open()" />
+      <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="w-40">
+      <mat-label>Ώρα</mat-label>
+      <input matInput [matTimepicker]="timepicker" formControlName="startsTime" />
+      <mat-timepicker-toggle matIconSuffix [for]="timepicker"></mat-timepicker-toggle>
+      <mat-timepicker #timepicker interval="15m"></mat-timepicker>
+    </mat-form-field>
+  </div>
   <mat-form-field appearance="outline">
     <mat-label>Διάρκεια (λεπτά)</mat-label>
     <input matInput type="number" formControlName="durationMinutes" />

@@ -2,16 +2,27 @@ import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTimepickerModule } from '@angular/material/timepicker';
 import { ClassSessionApiService, ClassTypeApiService } from '@frontend/data-access';
 import { ClassSession, ClassType } from '@frontend/models';
 
 @Component({
   selector: 'app-sessions',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, DatePipe],
+  imports: [
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatButtonModule,
+    MatDatepickerModule,
+    MatTimepickerModule,
+    DatePipe,
+  ],
   templateUrl: './sessions.html',
 })
 export class Sessions {
@@ -26,7 +37,8 @@ export class Sessions {
 
   protected readonly form = this.fb.nonNullable.group({
     classTypeId: ['', Validators.required],
-    startsAt: ['', Validators.required], // datetime-local (τοπική) → μετατροπή σε ISO UTC στο submit
+    startsDate: this.fb.control<Date | null>(null, Validators.required),
+    startsTime: this.fb.control<Date | null>(null, Validators.required), // ώρα (τοπική) → συνδυάζεται με startsDate στο submit
     durationMinutes: [60, [Validators.required, Validators.min(1)]],
     capacity: [10, [Validators.required, Validators.min(1)]],
   });
@@ -52,13 +64,15 @@ export class Sessions {
       return;
     }
     const raw = this.form.getRawValue();
+    const startsAt = new Date(raw.startsDate!);
+    startsAt.setHours(raw.startsTime!.getHours(), raw.startsTime!.getMinutes(), 0, 0);
     this.errorMessage.set(null);
     this.submitting.set(true);
     this.sessionApi
       .create({
         classTypeId: raw.classTypeId,
         // instructorId παραλείπεται → το backend βάζει τον τρέχοντα instructor.
-        startsAt: new Date(raw.startsAt).toISOString(),
+        startsAt: startsAt.toISOString(),
         durationMinutes: raw.durationMinutes,
         capacity: raw.capacity,
       })
