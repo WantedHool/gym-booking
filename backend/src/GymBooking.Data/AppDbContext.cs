@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
     public DbSet<ClassType> ClassTypes => Set<ClassType>();
     public DbSet<ClassSession> ClassSessions => Set<ClassSession>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<MembershipPlan> MembershipPlans => Set<MembershipPlan>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +35,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
         modelBuilder.Entity<ClassType>().HasQueryFilter(c => c.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<ClassSession>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<Booking>().HasQueryFilter(b => b.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<MembershipPlan>().HasQueryFilter(p => p.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
 
         // DB-level δικλείδα ασφαλείας ενάντια σε διπλή confirmed κράτηση (πέρα από τον έλεγχο στο service).
         modelBuilder.Entity<Booking>()

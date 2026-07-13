@@ -63,6 +63,7 @@ public class ScheduleTests
         var seeded = await SeedAsync(weekStart);
         var userId = Guid.NewGuid();
 
+        await TestData.GiveUnlimitedAsync(_factory.Services, seeded.TenantId, userId);
         using (var scope = _factory.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(seeded.TenantId);

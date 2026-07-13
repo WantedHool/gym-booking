@@ -1,0 +1,26 @@
+<div class="app-card-padded flex items-center gap-3">
+  <div class="flex-1 min-w-0">
+    <div class="font-medium">{{ session().classTypeName }} — {{ session().instructorName }}</div>
+    <div class="app-text-muted">{{ session().startsAt | date: dateFormat() }}</div>
+  </div>
+
+  <div class="flex flex-col items-center gap-2 shrink-0">
+    <div
+      class="flex items-center gap-1 text-sm"
+      [class.app-text-muted]="!isFull()"
+      [class.text-red-400]="isFull()"
+      [attr.aria-label]="session().bookedCount + ' από ' + session().capacity + ' θέσεις'"
+    >
+      <mat-icon class="!text-base !w-4 !h-4">group</mat-icon>
+      <span class="font-medium tabular-nums">{{ session().bookedCount }}/{{ session().capacity }}</span>
+    </div>
+
+    @if (session().isBookedByMe) {
+      <button mat-button color="warn" (click)="cancelSession.emit(session())">Ακύρωση</button>
+    } @else {
+      <button mat-flat-button color="primary" [disabled]="isFull()" (click)="bookSession.emit(session())">
+        Κράτηση
+      </button>
+    }
+  </div>
+</div>

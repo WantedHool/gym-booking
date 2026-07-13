@@ -1,0 +1,23 @@
+<div class="app-page">
+  <lib-page-header title="Ιστορικό κρατήσεων" />
+
+  @if (bookingsStore.loading()) {
+    <lib-list-skeleton [count]="5" />
+  } @else if (history().length === 0) {
+    <lib-empty-state icon="history" message="Κενό ιστορικό." />
+  } @else {
+    <div class="flex flex-col gap-2">
+      @for (b of pagination.paginatedItems(); track b.id) {
+        <lib-booking-card [booking]="b" [dateFormat]="dateFormats.history" [showStatus]="true" />
+      }
+    </div>
+
+    <lib-list-paginator
+      [length]="history().length"
+      [pageIndex]="pagination.pageIndex()"
+      [pageSize]="pagination.pageSize()"
+      [pageSizeOptions]="pagination.pageSizeOptions"
+      (pageChange)="pagination.onPage($event)"
+    />
+  }
+</div>

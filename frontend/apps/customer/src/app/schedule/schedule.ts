@@ -7,21 +7,44 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import {
   BookingApiService,
+  BookingsStore,
   ClassTypeApiService,
   InstructorApiService,
   ScheduleApiService,
 } from '@frontend/data-access';
 import { ClassType, Instructor, ScheduleSession } from '@frontend/models';
+import {
+  CUSTOMER_DATE_FORMATS,
+  EmptyState,
+  ErrorBanner,
+  ListSkeleton,
+  PageHeader,
+  SessionCard,
+} from '@frontend/ui';
 
 @Component({
   selector: 'app-schedule',
   standalone: true,
-  imports: [DatePipe, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatSelectModule],
+  imports: [
+    DatePipe,
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatSelectModule,
+    PageHeader,
+    EmptyState,
+    ErrorBanner,
+    ListSkeleton,
+    SessionCard,
+  ],
   templateUrl: './schedule.html',
 })
 export class Schedule {
+  protected readonly dateFormats = CUSTOMER_DATE_FORMATS;
   private readonly scheduleApi = inject(ScheduleApiService);
   private readonly bookingApi = inject(BookingApiService);
+  private readonly bookingsStore = inject(BookingsStore);
   private readonly classTypeApi = inject(ClassTypeApiService);
   private readonly instructorApi = inject(InstructorApiService);
 
@@ -32,6 +55,7 @@ export class Schedule {
   protected readonly classTypeId = signal<string>('');
   protected readonly instructorId = signal<string>('');
   protected readonly message = signal<string | null>(null);
+  protected readonly loading = signal(false);
 
   protected readonly weekEnd = computed(() => {
     const d = new Date(this.weekStart());
@@ -48,12 +72,13 @@ export class Schedule {
   private mondayOf(date: Date): Date {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
-    const dayFromMonday = (d.getDay() + 6) % 7; // Κυρ=6 ... Δευ=0
+    const dayFromMonday = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - dayFromMonday);
     return d;
   }
 
   protected load(): void {
+    this.loading.set(true);
     const from = this.weekStart();
     const to = new Date(from);
     to.setDate(to.getDate() + 7);
@@ -64,7 +89,13 @@ export class Schedule {
         classTypeId: this.classTypeId() || undefined,
         instructorId: this.instructorId() || undefined,
       })
-      .subscribe((x) => this.sessions.set(x));
+      .subscribe({
+        next: (x) => {
+          this.sessions.set(x);
+          this.loading.set(false);
+        },
+        error: () => this.loading.set(false),
+      });
   }
 
   changeWeek(deltaDays: number): void {
@@ -77,7 +108,10 @@ export class Schedule {
   book(session: ScheduleSession): void {
     this.message.set(null);
     this.bookingApi.book({ classSessionId: session.id }).subscribe({
-      next: () => this.load(),
+      next: () => {
+        this.load();
+        this.bookingsStore.load();
+      },
       error: (err) => this.message.set(err?.error ?? 'Η κράτηση απέτυχε.'),
     });
   }
@@ -86,6 +120,11 @@ export class Schedule {
     if (!session.myBookingId) {
       return;
     }
-    this.bookingApi.cancel(session.myBookingId).subscribe({ next: () => this.load() });
+    this.bookingApi.cancel(session.myBookingId).subscribe({
+      next: () => {
+        this.load();
+        this.bookingsStore.load();
+      },
+    });
   }
 }

@@ -4296,15 +4296,1109 @@ Expected: όλα PASS.
 
 ---
 
-## PHASE 6–8: Outline (επέκταση σε αναλυτικά tasks όταν φτάνουμε)
+## PHASE 6: Waitlist + cancellation policy (~10h)
+
+**Goal:** Όταν ένα session είναι γεμάτο, ο χρήστης μπαίνει σε λίστα αναμονής· σε ακύρωση, ο 1ος **έγκυρος** της λίστας προωθείται αυτόματα μέσα στο ίδιο atomic transaction. Επιπλέον, μπλοκάρεται η ακύρωση πολύ κοντά στην ώρα του μαθήματος (per-tenant πολιτική).
+
+**Architecture:** Το `WaitlistEntry` ακολουθεί το ίδιο multi-tenant pattern (TenantId + global query filter + partial unique index). Το auto-promote ζει στο **μοναδικό σημείο** που αλλάζει το `BookedCount` (`BookingService.CancelAsync`), ξαναχρησιμοποιώντας κοινούς helpers επιλεξιμότητας/consumption με το `BookAsync`. Join/leave/view σε ξεχωριστό `WaitlistService` + `WaitlistController`.
+
+### Αποφάσεις Φάσης 6 (κλειδωμένες) _(2026-07-13)_
+- **Scope = Backend + minimal FE.** Πλήρες backend· ελάχιστο customer UI μόνο για τη ροή (join/leave + ένδειξη θέσης). Χωρίς real-time/toast (μελλοντικό — SignalR Φ7).
+- **Auto-promote = αυστηρό re-validate + skip-to-next.** Στο promote ο υποψήφιος ελέγχεται σαν κανονικό booking: έγκυρη active συνδρομή με υπόλοιπο **και** καμία χρονική επικάλυψη **και** όχι ήδη confirmed. Αν αποτύχει → βγαίνει από τη λίστα (`Left`) και δοκιμάζεται ο επόμενος. Το promote **καταναλώνει** session όπως κανονικό booking.
+- **Position = computed, όχι stored.** Καμία στήλη `Position`· η σειρά προκύπτει από `CreatedAt` (FIFO), η θέση υπολογίζεται στο read (`COUNT` παλαιότερων `Waiting` + 1). Αποφεύγει re-sequencing writes & drift. _(Μικρή απόκλιση από το spec που ανέφερε `position` field — συνειδητή απλοποίηση.)_
+- **`WaitlistEntry` με soft-status** (`Waiting`/`Promoted`/`Left`) αντί hard-delete — συνεπές με το soft-delete convention· δίνει audit.
+- **Συνδρομή ΔΕΝ ελέγχεται στο join** — μόνο στο promote (συνεπές με skip-to-next). Το join μένει lightweight.
+- **`GET /waitlist/me` ξεχωριστό** (όχι μέσα στο `/bookings/me`) — κρατά bookings/waitlist contracts εστιασμένα, δεν πειράζει το Φ4 contract.
+- **Cancellation policy:** block αν `now > StartsAt − Tenant.CancellationHours`· `CancellationHours = 0` ⇒ χωρίς περιορισμό. Νέο outcome `CancellationTooLate` → HTTP 409. Idempotent re-cancel & instructor session-cancel **δεν** επηρεάζονται.
+- **Dependency:** το auto-promote προϋποθέτει ότι το subscription consumption της Φ5 (**Task 44**) έχει μπει στο `BookingService`. Το **Task 52** κάνει refactor τη λογική consumption/overlap σε κοινούς helpers ώστε book & promote να τη μοιράζονται (single source of truth).
+- **Αναβολή (μετά τη Φ6):** recurring template generation & background job (Hangfire/Quartz) — δεν χρειάζονται τώρα (το promote είναι σύγχρονο μέσα στο tx). Θα συζητηθούν αφού κλείσει το core.
+
+### Task 49: WaitlistEntry entity + enum + DbContext + migration
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Entities/Enums/WaitlistStatus.cs`
+- Create: `backend/src/GymBooking.Core/Entities/Models/WaitlistEntry.cs`
+- Modify: `backend/src/GymBooking.Data/AppDbContext.cs`
+- Test: `backend/tests/GymBooking.Tests/TenantIsolationTests.cs`
+
+- [ ] **Step 1:** Enum `WaitlistStatus.cs`:
+
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum WaitlistStatus
+{
+    Waiting,     // = 0
+    Promoted,    // = 1
+    Left,        // = 2  (αποχώρησε ή skipped στο promote)
+}
+```
+
+- [ ] **Step 2:** Entity `WaitlistEntry.cs`:
+
+```csharp
+using GymBooking.Core.Entities.Enums;
+
+namespace GymBooking.Core.Entities.Models;
+
+public class WaitlistEntry
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid ClassSessionId { get; set; }
+    public WaitlistStatus Status { get; set; } = WaitlistStatus.Waiting;
+    public DateTime CreatedAt { get; set; }
+}
+```
+
+- [ ] **Step 3:** Στο `AppDbContext.cs` πρόσθεσε DbSet (μετά το `Subscriptions`):
+
+```csharp
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
+```
+
+- [ ] **Step 4:** Στο `OnModelCreating`, query filter (μετά το `Subscription` filter):
+
+```csharp
+        modelBuilder.Entity<WaitlistEntry>().HasQueryFilter(w => w.TenantId == _currentTenant.TenantId);
+```
+
+- [ ] **Step 5:** Στο ίδιο `OnModelCreating`, DB-level δικλείδα ενάντια σε διπλή `Waiting` εγγραφή (μετά το partial index του `Booking`):
+
+```csharp
+        // Ένας χρήστης δεν μπορεί να είναι δύο φορές σε Waiting για το ίδιο session.
+        modelBuilder.Entity<WaitlistEntry>()
+            .HasIndex(w => new { w.UserId, w.ClassSessionId })
+            .IsUnique()
+            .HasFilter("\"Status\" = 0");
+```
+
+- [ ] **Step 6 (test):** Στο `TenantIsolationTests.cs` πρόσθεσε (μοτίβο ίδιο με το `Subscriptions_query_returns_only_current_tenant_rows`):
+
+```csharp
+    [Fact]
+    public void Waitlist_query_returns_only_current_tenant_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        using (var seedContext = CreateContext(dbName, new FakeCurrentTenant(tenantA)))
+        {
+            seedContext.WaitlistEntries.Add(new WaitlistEntry
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA, UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.WaitlistEntries.Add(new WaitlistEntry
+            {
+                Id = Guid.NewGuid(), TenantId = tenantB, UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.SaveChanges();
+        }
+
+        using var context = CreateContext(dbName, new FakeCurrentTenant(tenantA));
+        var rows = context.WaitlistEntries.ToList();
+
+        Assert.Single(rows);
+        Assert.Equal(tenantA, rows[0].TenantId);
+    }
+```
+
+- [ ] **Step 7:** Migration:
+
+```bash
+cd backend
+dotnet ef migrations add AddWaitlist -p src/GymBooking.Data -s src/GymBooking.Api
+```
+Expected: νέο `*_AddWaitlist.cs` με τον πίνακα `WaitlistEntries` + το partial unique index.
+
+- [ ] **Step 8:** Verify: `dotnet build && dotnet test` → PASS.
+
+- [ ] **Step 9: Commit** `git commit -am "feat: WaitlistEntry entity + migration"`
+
+### Task 50: Cancellation policy στο CancelAsync
+
+**Files:**
+- Modify: `backend/src/GymBooking.Core/Entities/Enums/BookingOutcome.cs`
+- Modify: `backend/src/GymBooking.Api/Services/BookingService.cs`
+- Modify: `backend/src/GymBooking.Api/Controllers/BookingsController.cs`
+- Create: `backend/tests/GymBooking.Tests/CancellationPolicyTests.cs`
+
+- [ ] **Step 1:** Πρόσθεσε στο `BookingOutcome` (τέλος του enum): `CancellationTooLate,`
+
+- [ ] **Step 2:** Στον `BookingService.CancelAsync`, **αμέσως μετά** το load του `session` (το `FromSqlInterpolated ... FOR UPDATE`) και **πριν** το `booking.Status = BookingStatus.Cancelled;`, πρόσθεσε τον έλεγχο πολιτικής:
+
+```csharp
+            // Φ6: πολιτική ακύρωσης — block αν είμαστε πολύ κοντά στην ώρα του μαθήματος.
+            if (session is not null)
+            {
+                var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+                var cancellationHours = tenant?.CancellationHours ?? 0;
+                if (cancellationHours > 0 && DateTime.UtcNow > session.StartsAt.AddHours(-cancellationHours))
+                {
+                    return (BookingOutcome.CancellationTooLate, booking);
+                }
+            }
+```
+(Ο idempotent έλεγχος `booking.Status == Cancelled → Success` είναι **πριν** το session load, άρα το re-cancel δεν μπλοκάρεται από την πολιτική.)
+
+- [ ] **Step 3:** Στον `BookingsController.Cancel`, άλλαξε το mapping ώστε να χειρίζεται το νέο outcome:
+
+```csharp
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid id)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var (outcome, _) = await _service.CancelAsync(userId, id);
+        return outcome switch
+        {
+            BookingOutcome.SessionNotFound => NotFound(),
+            BookingOutcome.CancellationTooLate => Conflict("Δεν μπορείς να ακυρώσεις τόσο κοντά στην ώρα του μαθήματος."),
+            _ => NoContent(),
+        };
+    }
+```
+
+- [ ] **Step 4 (tests):** `CancellationPolicyTests.cs` (Postgres· σπέρνει **Tenant row** με `CancellationHours`):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class CancellationPolicyTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public CancellationPolicyTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task<(Guid TenantId, Guid SessionId)> SeedAsync(int cancellationHours, DateTime startsAtUtc, int capacity = 5)
+    {
+        var tenantId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "T", Slug = tenantId.ToString(), CancellationHours = cancellationHours, IsActive = true });
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = capacity, IsActive = true };
+        var s = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = Guid.NewGuid(), StartsAt = startsAtUtc, DurationMinutes = 60, Capacity = capacity, BookedCount = 0, IsActive = true };
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.Add(s);
+        await db.SaveChangesAsync();
+        return (tenantId, s.Id);
+    }
+
+    private async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid tenantId, Guid userId, Guid sessionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        return await scope.ServiceProvider.GetRequiredService<BookingService>().BookAsync(userId, sessionId);
+    }
+
+    private async Task<(BookingOutcome Outcome, Booking? Booking)> CancelAsync(Guid tenantId, Guid userId, Guid bookingId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        return await scope.ServiceProvider.GetRequiredService<BookingService>().CancelAsync(userId, bookingId);
+    }
+
+    [Fact]
+    public async Task Cancel_within_window_is_blocked()
+    {
+        var (tenantId, sessionId) = await SeedAsync(cancellationHours: 24, startsAtUtc: DateTime.UtcNow.AddHours(2));
+        var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
+        var (_, booking) = await BookAsync(tenantId, userId, sessionId);
+
+        var (outcome, _) = await CancelAsync(tenantId, userId, booking!.Id);
+
+        Assert.Equal(BookingOutcome.CancellationTooLate, outcome);
+    }
+
+    [Fact]
+    public async Task Cancel_outside_window_succeeds()
+    {
+        var (tenantId, sessionId) = await SeedAsync(cancellationHours: 24, startsAtUtc: DateTime.UtcNow.AddDays(2));
+        var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
+        var (_, booking) = await BookAsync(tenantId, userId, sessionId);
+
+        var (outcome, _) = await CancelAsync(tenantId, userId, booking!.Id);
+
+        Assert.Equal(BookingOutcome.Success, outcome);
+    }
+
+    [Fact]
+    public async Task Cancellation_hours_zero_allows_anytime()
+    {
+        var (tenantId, sessionId) = await SeedAsync(cancellationHours: 0, startsAtUtc: DateTime.UtcNow.AddHours(1));
+        var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
+        var (_, booking) = await BookAsync(tenantId, userId, sessionId);
+
+        var (outcome, _) = await CancelAsync(tenantId, userId, booking!.Id);
+
+        Assert.Equal(BookingOutcome.Success, outcome);
+    }
+}
+```
+
+- [ ] **Step 5:** Verify: `cd backend && dotnet test` → PASS.
+
+- [ ] **Step 6: Commit** `git commit -am "feat: cancellation-window policy on cancel"`
+
+### Task 51: WaitlistService — join / leave / view
+
+**Files:**
+- Create: `backend/src/GymBooking.Core/Entities/Enums/WaitlistOutcome.cs`
+- Modify: `backend/src/GymBooking.Core/Contracts/BookingContracts.cs`
+- Create: `backend/src/GymBooking.Api/Services/WaitlistService.cs`
+- Modify: `backend/src/GymBooking.Api/Program.cs`
+- Create: `backend/tests/GymBooking.Tests/WaitlistServiceTests.cs`
+
+- [ ] **Step 1:** Enum `WaitlistOutcome.cs`:
+
+```csharp
+namespace GymBooking.Core.Entities.Enums;
+
+public enum WaitlistOutcome
+{
+    Joined,
+    SessionNotFound,
+    SessionNotFull,      // υπάρχει θέση → κάνε κανονική κράτηση, όχι waitlist
+    AlreadyBooked,
+    AlreadyOnWaitlist,
+    Left,
+    NotOnWaitlist,
+}
+```
+
+- [ ] **Step 2:** Στο `BookingContracts.cs` πρόσθεσε το response DTO:
+
+```csharp
+public record WaitlistEntryResponse(Guid ClassSessionId, string ClassTypeName, DateTime StartsAt, int Position);
+```
+
+- [ ] **Step 3:** `WaitlistService.cs`:
+
+```csharp
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace GymBooking.Api.Services;
+
+public class WaitlistService
+{
+    private readonly AppDbContext _dbContext;
+    private readonly ICurrentTenant _currentTenant;
+
+    public WaitlistService(AppDbContext dbContext, ICurrentTenant currentTenant)
+    {
+        _dbContext = dbContext;
+        _currentTenant = currentTenant;
+    }
+
+    public async Task<WaitlistOutcome> JoinAsync(Guid userId, Guid classSessionId)
+    {
+        var session = await _dbContext.ClassSessions.FirstOrDefaultAsync(s => s.Id == classSessionId);
+        if (session is null || !session.IsActive || session.IsCancelled)
+        {
+            return WaitlistOutcome.SessionNotFound;
+        }
+
+        if (session.BookedCount < session.Capacity)
+        {
+            return WaitlistOutcome.SessionNotFull;
+        }
+
+        var alreadyBooked = await _dbContext.Bookings
+            .AnyAsync(b => b.UserId == userId && b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed);
+        if (alreadyBooked)
+        {
+            return WaitlistOutcome.AlreadyBooked;
+        }
+
+        var alreadyWaiting = await _dbContext.WaitlistEntries
+            .AnyAsync(w => w.UserId == userId && w.ClassSessionId == classSessionId && w.Status == WaitlistStatus.Waiting);
+        if (alreadyWaiting)
+        {
+            return WaitlistOutcome.AlreadyOnWaitlist;
+        }
+
+        _dbContext.WaitlistEntries.Add(new WaitlistEntry
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _currentTenant.TenantId,
+            UserId = userId,
+            ClassSessionId = classSessionId,
+            Status = WaitlistStatus.Waiting,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+        return WaitlistOutcome.Joined;
+    }
+
+    public async Task<WaitlistOutcome> LeaveAsync(Guid userId, Guid classSessionId)
+    {
+        var entry = await _dbContext.WaitlistEntries
+            .FirstOrDefaultAsync(w => w.UserId == userId && w.ClassSessionId == classSessionId && w.Status == WaitlistStatus.Waiting);
+        if (entry is null)
+        {
+            return WaitlistOutcome.NotOnWaitlist;
+        }
+
+        entry.Status = WaitlistStatus.Left;
+        await _dbContext.SaveChangesAsync();
+        return WaitlistOutcome.Left;
+    }
+
+    public async Task<List<WaitlistEntryResponse>> GetMineAsync(Guid userId)
+    {
+        var mine = await (
+            from w in _dbContext.WaitlistEntries
+            where w.UserId == userId && w.Status == WaitlistStatus.Waiting
+            join s in _dbContext.ClassSessions on w.ClassSessionId equals s.Id
+            join ct in _dbContext.ClassTypes on s.ClassTypeId equals ct.Id
+            select new { w.ClassSessionId, ClassTypeName = ct.Name, s.StartsAt, w.CreatedAt }).ToListAsync();
+
+        var result = new List<WaitlistEntryResponse>();
+        foreach (var m in mine)
+        {
+            // Θέση = πόσοι Waiting μπήκαν νωρίτερα στο ίδιο session, +1 (computed — κανένα stored Position).
+            var earlier = await _dbContext.WaitlistEntries
+                .CountAsync(w => w.ClassSessionId == m.ClassSessionId
+                    && w.Status == WaitlistStatus.Waiting
+                    && w.CreatedAt < m.CreatedAt);
+            result.Add(new WaitlistEntryResponse(m.ClassSessionId, m.ClassTypeName, m.StartsAt, earlier + 1));
+        }
+
+        return result.OrderBy(r => r.StartsAt).ToList();
+    }
+}
+```
+
+- [ ] **Step 4:** Στο `Program.cs`, δίπλα στην εγγραφή του `BookingService`, πρόσθεσε:
+
+```csharp
+builder.Services.AddScoped<WaitlistService>();
+```
+
+- [ ] **Step 5 (tests):** `WaitlistServiceTests.cs` (Postgres):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class WaitlistServiceTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public WaitlistServiceTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task<(Guid TenantId, Guid SessionId)> SeedSessionAsync(int capacity)
+    {
+        var tenantId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = capacity, IsActive = true };
+        var s = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = Guid.NewGuid(), StartsAt = DateTime.UtcNow.AddDays(1), DurationMinutes = 60, Capacity = capacity, BookedCount = 0, IsActive = true };
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.Add(s);
+        await db.SaveChangesAsync();
+        return (tenantId, s.Id);
+    }
+
+    private async Task FillSessionAsync(Guid tenantId, Guid sessionId, Guid fillerId)
+    {
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, fillerId);
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        await scope.ServiceProvider.GetRequiredService<BookingService>().BookAsync(fillerId, sessionId);
+    }
+
+    private async Task<WaitlistOutcome> JoinAsync(Guid tenantId, Guid userId, Guid sessionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        return await scope.ServiceProvider.GetRequiredService<WaitlistService>().JoinAsync(userId, sessionId);
+    }
+
+    [Fact]
+    public async Task Join_full_session_succeeds()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
+        await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
+
+        var outcome = await JoinAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        Assert.Equal(WaitlistOutcome.Joined, outcome);
+    }
+
+    [Fact]
+    public async Task Join_session_with_space_returns_SessionNotFull()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5);
+
+        var outcome = await JoinAsync(tenantId, Guid.NewGuid(), sessionId);
+
+        Assert.Equal(WaitlistOutcome.SessionNotFull, outcome);
+    }
+
+    [Fact]
+    public async Task Join_twice_returns_AlreadyOnWaitlist()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
+        await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
+        var userId = Guid.NewGuid();
+        await JoinAsync(tenantId, userId, sessionId);
+
+        var outcome = await JoinAsync(tenantId, userId, sessionId);
+
+        Assert.Equal(WaitlistOutcome.AlreadyOnWaitlist, outcome);
+    }
+
+    [Fact]
+    public async Task GetMine_reports_fifo_position()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
+        await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        await JoinAsync(tenantId, first, sessionId);
+        await JoinAsync(tenantId, second, sessionId);
+
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var svc = scope.ServiceProvider.GetRequiredService<WaitlistService>();
+        var firstMine = await svc.GetMineAsync(first);
+        var secondMine = await svc.GetMineAsync(second);
+
+        Assert.Equal(1, firstMine.Single().Position);
+        Assert.Equal(2, secondMine.Single().Position);
+    }
+}
+```
+
+- [ ] **Step 6:** Verify: `cd backend && dotnet test` → PASS.
+
+- [ ] **Step 7: Commit** `git commit -am "feat: waitlist join/leave/view service"`
+
+### Task 52: Auto-promote στο CancelAsync + κοινοί helpers
+
+**Files:**
+- Modify: `backend/src/GymBooking.Api/Services/BookingService.cs`
+- Create: `backend/tests/GymBooking.Tests/WaitlistPromoteTests.cs`
+
+- [ ] **Step 1:** Πρόσθεσε δύο private helpers στο `BookingService` (μοιράζονται book & promote — single source of truth για overlap & consumption). Βάλ' τους στο τέλος της κλάσης:
+
+```csharp
+    // Χρονική επικάλυψη με άλλη confirmed κράτηση του χρήστη (τα confirmed sessions είναι λίγα → in-memory).
+    private async Task<bool> HasTimeConflictAsync(Guid userId, ClassSession session)
+    {
+        var newStart = session.StartsAt;
+        var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
+        var userSessions = await (
+            from b in _dbContext.Bookings
+            where b.UserId == userId && b.Status == BookingStatus.Confirmed
+            join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
+            select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
+
+        return userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
+    }
+
+    // Κλειδώνει (FOR UPDATE) & καταναλώνει τη μοναδική active συνδρομή· επιστρέφει αν είναι χρήσιμη + το Id της.
+    private async Task<(bool Usable, Guid? SubscriptionId)> TryConsumeSubscriptionAsync(Guid userId, Guid tenantId)
+    {
+        var subscription = await _dbContext.Subscriptions
+            .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""UserId"" = {userId} AND ""TenantId"" = {tenantId} AND ""Status"" = 0 ORDER BY ""ValidFrom"" DESC LIMIT 1 FOR UPDATE")
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync();
+
+        var now = DateTime.UtcNow;
+        var usable = subscription is not null
+            && subscription.ValidFrom <= now && now <= subscription.ValidTo
+            && (subscription.RemainingSessions == null || subscription.RemainingSessions > 0);
+        if (!usable)
+        {
+            return (false, null);
+        }
+
+        if (subscription!.RemainingSessions != null)
+        {
+            subscription.RemainingSessions -= 1;
+        }
+
+        return (true, subscription.Id);
+    }
+```
+
+- [ ] **Step 2:** Refactor το `BookAsync` ώστε να χρησιμοποιεί τους helpers (DRY). Αντικατέστησε (α) το overlap block και (β) το Φ5 consumption block. Το τμήμα από το overlap έως το commit γίνεται:
+
+```csharp
+            if (await HasTimeConflictAsync(userId, session))
+            {
+                return (BookingOutcome.TimeConflict, null);
+            }
+
+            if (session.BookedCount >= session.Capacity)
+            {
+                return (BookingOutcome.SessionFull, null);
+            }
+
+            var (usable, subscriptionId) = await TryConsumeSubscriptionAsync(userId, tenantId);
+            if (!usable)
+            {
+                return (BookingOutcome.NoSubscription, null);
+            }
+
+            var booking = new Booking
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                ClassSessionId = classSessionId,
+                Status = BookingStatus.Confirmed,
+                CreatedAt = DateTime.UtcNow,
+                SubscriptionId = subscriptionId,
+            };
+            _dbContext.Bookings.Add(booking);
+            session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount (book)
+
+            await _dbContext.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return (BookingOutcome.Success, booking);
+```
+
+- [ ] **Step 3:** Στο `CancelAsync`, **μετά** το refund της Φ5 (Task 44) και **πριν** το `await _dbContext.SaveChangesAsync(); await tx.CommitAsync();`, πρόσθεσε το auto-promote. Ζει στο ίδιο tx με κλειδωμένο το session:
+
+```csharp
+            // --- Φ6: auto-promote επόμενου έγκυρου της λίστας αναμονής (μέσα στο ίδιο tx) ---
+            if (session is not null && session.BookedCount < session.Capacity)
+            {
+                var waiting = await _dbContext.WaitlistEntries
+                    .Where(w => w.ClassSessionId == booking.ClassSessionId && w.Status == WaitlistStatus.Waiting)
+                    .OrderBy(w => w.CreatedAt)
+                    .ToListAsync();
+
+                foreach (var entry in waiting)
+                {
+                    var alreadyBooked = await _dbContext.Bookings
+                        .AnyAsync(b => b.UserId == entry.UserId && b.ClassSessionId == booking.ClassSessionId && b.Status == BookingStatus.Confirmed);
+                    if (alreadyBooked)
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    if (await HasTimeConflictAsync(entry.UserId, session))
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    var (usable, subscriptionId) = await TryConsumeSubscriptionAsync(entry.UserId, tenantId);
+                    if (!usable)
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    _dbContext.Bookings.Add(new Booking
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        UserId = entry.UserId,
+                        ClassSessionId = booking.ClassSessionId,
+                        Status = BookingStatus.Confirmed,
+                        CreatedAt = DateTime.UtcNow,
+                        SubscriptionId = subscriptionId,
+                    });
+                    session.BookedCount += 1; // επιστροφή θέσης → προωθημένος
+                    entry.Status = WaitlistStatus.Promoted;
+                    break;
+                }
+            }
+            // --- τέλος auto-promote ---
+```
+
+- [ ] **Step 4 (tests):** `WaitlistPromoteTests.cs` (Postgres):
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Entities.Enums;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class WaitlistPromoteTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public WaitlistPromoteTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    private async Task<(Guid TenantId, Guid SessionId)> SeedSessionAsync(int capacity, DateTime startsAtUtc)
+    {
+        var tenantId = Guid.NewGuid();
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = capacity, IsActive = true };
+        var s = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = Guid.NewGuid(), StartsAt = startsAtUtc, DurationMinutes = 60, Capacity = capacity, BookedCount = 0, IsActive = true };
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.Add(s);
+        await db.SaveChangesAsync();
+        return (tenantId, s.Id);
+    }
+
+    private BookingService Booking(IServiceScope scope, Guid tenantId)
+    {
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        return scope.ServiceProvider.GetRequiredService<BookingService>();
+    }
+
+    private WaitlistService Waitlist(IServiceScope scope, Guid tenantId)
+    {
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        return scope.ServiceProvider.GetRequiredService<WaitlistService>();
+    }
+
+    private async Task<bool> HasConfirmedBookingAsync(Guid tenantId, Guid userId, Guid sessionId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.Bookings.AnyAsync(b => b.UserId == userId && b.ClassSessionId == sessionId && b.Status == BookingStatus.Confirmed);
+    }
+
+    [Fact]
+    public async Task Cancel_auto_promotes_first_waiting()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var holder = Guid.NewGuid();
+        var waiter = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, waiter);
+
+        Booking booking;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId); // γεμίζει
+            booking = b!;
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Waitlist(scope, tenantId).JoinAsync(waiter, sessionId);
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Booking(scope, tenantId).CancelAsync(holder, booking.Id); // ελευθερώνει → promote waiter
+        }
+
+        Assert.True(await HasConfirmedBookingAsync(tenantId, waiter, sessionId));
+    }
+
+    [Fact]
+    public async Task Promote_skips_waiter_without_subscription_and_takes_next()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var holder = Guid.NewGuid();
+        var noSub = Guid.NewGuid();      // 1ος στη λίστα, ΧΩΡΙΣ συνδρομή → skip
+        var withSub = Guid.NewGuid();    // 2ος, με συνδρομή → προωθείται
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, withSub);
+
+        Booking booking;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId);
+            booking = b!;
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Waitlist(scope, tenantId).JoinAsync(noSub, sessionId);   // μπαίνει 1ος
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Waitlist(scope, tenantId).JoinAsync(withSub, sessionId); // μπαίνει 2ος
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
+        }
+
+        Assert.False(await HasConfirmedBookingAsync(tenantId, noSub, sessionId));   // skipped
+        Assert.True(await HasConfirmedBookingAsync(tenantId, withSub, sessionId));  // promoted
+    }
+
+    [Fact]
+    public async Task Cancel_with_empty_waitlist_leaves_spot_open()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var holder = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
+
+        Booking booking;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId);
+            booking = b!;
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
+        }
+
+        using var check = _factory.Services.CreateScope();
+        check.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = check.ServiceProvider.GetRequiredService<AppDbContext>();
+        var session = await db.ClassSessions.FirstAsync(s => s.Id == sessionId);
+        Assert.Equal(0, session.BookedCount);
+    }
+}
+```
+
+- [ ] **Step 5:** Verify ΟΛΑ → PASS: `cd backend && dotnet test`
+Expected: όλα PASS (τα refactored book/cancel + νέα promote tests).
+
+- [ ] **Step 6: Commit** `git commit -am "feat: waitlist auto-promote inside atomic cancel"`
+
+### Task 53: WaitlistController + endpoints
+
+**Files:**
+- Create: `backend/src/GymBooking.Api/Controllers/WaitlistController.cs`
+- Create: `backend/tests/GymBooking.Tests/WaitlistEndpointsTests.cs`
+
+- [ ] **Step 1:** `WaitlistController.cs`:
+
+```csharp
+using GymBooking.Api.Services;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Enums;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GymBooking.Api.Controllers;
+
+[ApiController]
+[Authorize]
+public class WaitlistController : ControllerBase
+{
+    private readonly WaitlistService _service;
+
+    public WaitlistController(WaitlistService service)
+    {
+        _service = service;
+    }
+
+    [HttpPost("sessions/{sessionId:guid}/waitlist")]
+    public async Task<IActionResult> Join(Guid sessionId)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var outcome = await _service.JoinAsync(userId, sessionId);
+        return outcome switch
+        {
+            WaitlistOutcome.Joined => NoContent(),
+            WaitlistOutcome.SessionNotFound => NotFound(),
+            WaitlistOutcome.SessionNotFull => Conflict("Υπάρχει διαθέσιμη θέση — κάνε κανονική κράτηση."),
+            WaitlistOutcome.AlreadyBooked => Conflict("Έχεις ήδη κράτηση σε αυτό το session."),
+            WaitlistOutcome.AlreadyOnWaitlist => Conflict("Είσαι ήδη στη λίστα αναμονής."),
+            _ => BadRequest(),
+        };
+    }
+
+    [HttpDelete("sessions/{sessionId:guid}/waitlist")]
+    public async Task<IActionResult> Leave(Guid sessionId)
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        var outcome = await _service.LeaveAsync(userId, sessionId);
+        return outcome == WaitlistOutcome.NotOnWaitlist ? NotFound() : NoContent();
+    }
+
+    [HttpGet("waitlist/me")]
+    public async Task<ActionResult<IEnumerable<WaitlistEntryResponse>>> GetMine()
+    {
+        var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+        return Ok(await _service.GetMineAsync(userId));
+    }
+}
+```
+
+- [ ] **Step 2 (tests):** `WaitlistEndpointsTests.cs` (Postgres· μοτίβο ίδιο με `BookingEndpointsTests` — αντέγραψε `CreateUserAsync`/`LoginAsync`):
+
+```csharp
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
+using GymBooking.Core.Entities.Models;
+using GymBooking.Core.Multitenancy;
+using GymBooking.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace GymBooking.Tests;
+
+[Collection("Postgres")]
+public class WaitlistEndpointsTests
+{
+    private readonly PostgresApiFactory _factory;
+
+    public WaitlistEndpointsTests(PostgresApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    // (Αντέγραψε CreateUserAsync + LoginAsync από το BookingEndpointsTests.)
+
+    private async Task<Guid> SeedFullSessionAsync(Guid tenantId, Guid fillerId)
+    {
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, fillerId);
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ct = new ClassType { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Yoga", DefaultDurationMinutes = 60, DefaultCapacity = 1, IsActive = true };
+        var s = new ClassSession { Id = Guid.NewGuid(), TenantId = tenantId, ClassTypeId = ct.Id, InstructorId = Guid.NewGuid(), StartsAt = DateTime.UtcNow.AddDays(1), DurationMinutes = 60, Capacity = 1, BookedCount = 0, IsActive = true };
+        db.ClassTypes.Add(ct);
+        db.ClassSessions.Add(s);
+        await db.SaveChangesAsync();
+        await scope.ServiceProvider.GetRequiredService<GymBooking.Api.Services.BookingService>().BookAsync(fillerId, s.Id); // γεμίζει
+        return s.Id;
+    }
+
+    [Fact]
+    public async Task Member_joins_waitlist_of_full_session_then_sees_it_in_my_waitlist()
+    {
+        var user = await CreateUserAsync("waiter@demo.gym", "Test1234!", Roles.User);
+        var sessionId = await SeedFullSessionAsync(user.TenantId, Guid.NewGuid());
+
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "waiter@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var join = await client.PostAsync($"/sessions/{sessionId}/waitlist", null);
+        Assert.Equal(HttpStatusCode.NoContent, join.StatusCode);
+
+        var mine = await client.GetFromJsonAsync<List<WaitlistEntryResponse>>("/waitlist/me");
+        Assert.Contains(mine!, w => w.ClassSessionId == sessionId && w.Position == 1);
+    }
+
+    [Fact]
+    public async Task Leave_waitlist_removes_entry()
+    {
+        var user = await CreateUserAsync("leaver@demo.gym", "Test1234!", Roles.User);
+        var sessionId = await SeedFullSessionAsync(user.TenantId, Guid.NewGuid());
+
+        var client = _factory.CreateClient();
+        var token = await LoginAsync(client, "leaver@demo.gym", "Test1234!");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await client.PostAsync($"/sessions/{sessionId}/waitlist", null);
+
+        var leave = await client.DeleteAsync($"/sessions/{sessionId}/waitlist");
+        Assert.Equal(HttpStatusCode.NoContent, leave.StatusCode);
+
+        var mine = await client.GetFromJsonAsync<List<WaitlistEntryResponse>>("/waitlist/me");
+        Assert.DoesNotContain(mine!, w => w.ClassSessionId == sessionId);
+    }
+}
+```
+
+- [ ] **Step 3:** Verify: `cd backend && dotnet test` → PASS. (Χειροκίνητα optional: Scalar `/scalar/v1` → δες τα νέα endpoints.)
+
+- [ ] **Step 4: Commit** `git commit -am "feat: waitlist endpoints (join/leave/me)"`
+
+### Task 54: Frontend — waitlist models + API service + cancel error
+
+**Files:**
+- Modify: `frontend/libs/models/src/lib/models.ts`
+- Create: `frontend/libs/data-access/src/lib/waitlist-api.service.ts`
+- Modify: `frontend/libs/data-access/src/index.ts`
+
+- [ ] **Step 1:** Στο `models.ts` πρόσθεσε το waitlist DTO (μετά το `ScheduleSession`):
+
+```typescript
+export interface WaitlistEntry {
+  classSessionId: string;
+  classTypeName: string;
+  startsAt: string; // ISO UTC
+  position: number;
+}
+```
+
+- [ ] **Step 2:** `waitlist-api.service.ts`:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { WaitlistEntry } from '@frontend/models';
+
+@Injectable({ providedIn: 'root' })
+export class WaitlistApiService {
+  private readonly http = inject(HttpClient);
+
+  getMine(): Observable<WaitlistEntry[]> {
+    return this.http.get<WaitlistEntry[]>('/waitlist/me');
+  }
+
+  join(sessionId: string): Observable<void> {
+    return this.http.post<void>(`/sessions/${sessionId}/waitlist`, {});
+  }
+
+  leave(sessionId: string): Observable<void> {
+    return this.http.delete<void>(`/sessions/${sessionId}/waitlist`);
+  }
+}
+```
+
+- [ ] **Step 3:** Στο `data-access/src/index.ts` πρόσθεσε το export:
+
+```typescript
+export * from './lib/waitlist-api.service';
+```
+
+- [ ] **Step 4:** Verify: `cd frontend && npx nx lint data-access && npx nx build data-access` → PASS.
+
+- [ ] **Step 5: Commit** `git commit -am "feat(fe): waitlist models + api service"`
+
+### Task 55: customer app — join/leave waitlist + θέση
+
+**Files:**
+- Modify: `frontend/apps/customer/src/app/schedule/schedule.ts`
+- Modify: `frontend/apps/customer/src/app/schedule/schedule.html`
+
+- [ ] **Step 1:** Στο `schedule.ts`, inject το `WaitlistApiService`, κράτα map θέσεων και φόρτωσέ το μαζί με το schedule. Πρόσθεσε στα imports/inject:
+
+```typescript
+import { WaitlistApiService } from '@frontend/data-access';
+```
+Μέσα στην κλάση (δίπλα στα υπόλοιπα `inject`):
+
+```typescript
+  private readonly waitlistApi = inject(WaitlistApiService);
+  protected readonly waitlistPositions = signal<Record<string, number>>({});
+```
+Πρόσθεσε helper + κάλεσέ τον στον constructor (μετά το `this.load()`):
+
+```typescript
+  protected loadWaitlist(): void {
+    this.waitlistApi.getMine().subscribe((entries) => {
+      const map: Record<string, number> = {};
+      for (const e of entries) {
+        map[e.classSessionId] = e.position;
+      }
+      this.waitlistPositions.set(map);
+    });
+  }
+```
+(Στον constructor: πρόσθεσε `this.loadWaitlist();` μετά το `this.load();`.)
+
+Πρόσθεσε τις μεθόδους join/leave (μετά το `cancel(...)`):
+
+```typescript
+  joinWaitlist(session: ScheduleSession): void {
+    this.message.set(null);
+    this.waitlistApi.join(session.id).subscribe({
+      next: () => this.loadWaitlist(),
+      error: (err) => this.message.set(err?.error ?? 'Η εγγραφή στη λίστα αναμονής απέτυχε.'),
+    });
+  }
+
+  leaveWaitlist(session: ScheduleSession): void {
+    this.waitlistApi.leave(session.id).subscribe({ next: () => this.loadWaitlist() });
+  }
+
+  isFull(session: ScheduleSession): boolean {
+    return session.bookedCount >= session.capacity;
+  }
+
+  waitlistPosition(session: ScheduleSession): number | null {
+    return this.waitlistPositions()[session.id] ?? null;
+  }
+```
+
+- [ ] **Step 2:** Στο `schedule.html`, στην περιοχή των κουμπιών κάθε session, πρόσθεσε τη λογική waitlist. Το πλήρες μπλοκ κουμπιών ανά session (αντικαθιστά το υπάρχον book/cancel μπλοκ):
+
+```html
+@if (session.isBookedByMe) {
+  <button mat-stroked-button color="warn" (click)="cancel(session)">Ακύρωση</button>
+} @else if (isFull(session)) {
+  @if (waitlistPosition(session); as pos) {
+    <span class="text-sm text-gray-600">Λίστα αναμονής: #{{ pos }}</span>
+    <button mat-button (click)="leaveWaitlist(session)">Έξοδος</button>
+  } @else {
+    <button mat-stroked-button (click)="joinWaitlist(session)">Λίστα αναμονής</button>
+  }
+} @else {
+  <button mat-flat-button color="primary" (click)="book(session)">Κράτηση</button>
+}
+```
+(Αν το υπάρχον markup έχει διαφορετική δομή/κλάσεις, κράτα το styling σου — άλλαξε μόνο τη λογική εμφάνισης κουμπιών.)
+
+- [ ] **Step 3:** Verify: `cd frontend && npx nx lint customer && npx nx build customer` → PASS.
+Χειροκίνητα (optional e2e): γέμισε session (capacity 1) με άλλον χρήστη → ο customer βλέπει «Λίστα αναμονής» → join δείχνει «#1» → ο holder ακυρώνει (εκτός window) → μετά από refresh ο waiter το βλέπει ως κράτηση.
+
+- [ ] **Step 4: Commit** `git commit -am "feat(customer): join/leave waitlist + position on schedule"`
+
+### Task 56: CI check + ενημέρωση progress
+
+**Files:** Modify `CLAUDE.md`
+
+- [ ] **Step 1:** CI (Docker up):
+
+```bash
+cd backend && dotnet build && dotnet test
+cd ../frontend && npx nx run-many -t lint build
+```
+Expected: όλα PASS.
+
+- [ ] **Step 2:** Στο `CLAUDE.md` → progress: τσέκαρε `[x] Φ6 — Waitlist + cancellation policy` και ενημέρωσε «Τώρα δουλεύω / Επόμενο» σε **Φ7 — Admin/staff dashboard + responsive QA**.
+
+- [ ] **Step 3: Commit** `git commit -am "docs: mark Phase 6 complete"`
+
+---
+
+## PHASE 7–8: Outline (επέκταση σε αναλυτικά tasks όταν φτάνουμε)
 
 > Κάθε φάση = δικό της σετ bite-sized TDD tasks, που θα γραφτούν όταν ξεκινά (τότε τα paths/DTOs υπάρχουν). Εδώ μόνο το περίγραμμα + τα tricky σημεία.
-
-### Phase 6 — Waitlist + cancellation policy (~10h)
-- [ ] `WaitlistEntry` entity + migration (μετακινήθηκε εδώ από τη Φ3 — logic & schema μαζί).
-- [ ] Join waitlist όταν γεμάτο· auto-promote #1 σε cancel (μέσα στο ίδιο atomic transaction του booking service — single point).
-- [ ] Cancellation policy: block ακύρωσης < `Tenant.CancellationHours` πριν.
-- [ ] (Προαιρετικά SHOULD: recurring template generation· background job για auto-promote/expiry — Hangfire/Quartz.)
 
 ### Phase 7 — Admin/staff dashboard + responsive QA (~12h)
 - [ ] `staff` app admin: διαχείριση χρηστών/ρόλων, εποπτεία κρατήσεων, tenant settings.
@@ -4322,5 +5416,5 @@ Expected: όλα PASS.
 
 ## Self-review (έγινε)
 - **Spec coverage:** όλα τα MUST έχουν task (auth/ρόλοι/multi-tenant Φ1· CRUD Φ2· atomic booking Φ3· schedule/dashboard Φ4· cancel/anti-double Φ3· responsive Φ4/7). SHOULD αναφέρονται στις σχετικές φάσεις ως προαιρετικά. WON'T εκτός.
-- **Placeholders:** Setup+Φ1+Φ2+Φ3+Φ4+Φ5 πλήρη με εντολές/κώδικα. Φ6–8 σκόπιμα outline (progressive elaboration για μεγάλο project) — όχι placeholders προς υλοποίηση τώρα.
+- **Placeholders:** Setup+Φ1+Φ2+Φ3+Φ4+Φ5+Φ6 πλήρη με εντολές/κώδικα. Φ7–8 σκόπιμα outline (progressive elaboration για μεγάλο project) — όχι placeholders προς υλοποίηση τώρα.
 - **Συνέπεια ονομάτων:** `ICurrentTenant`, `AppDbContext`, `TokenService`, `InvitationService`, entities Tenant/ApplicationUser/Invitation/ClassType/ClassSession/Booking/WaitlistEntry/MembershipPlan/Subscription — σταθερά σε όλο το plan & spec.

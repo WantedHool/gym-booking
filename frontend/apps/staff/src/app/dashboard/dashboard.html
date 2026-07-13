@@ -1,22 +1,21 @@
-<div class="flex flex-col gap-4 max-w-md">
+<div class="flex flex-col gap-4 app-content-dashboard">
   <h1 class="text-2xl font-bold text-white">Καλωσήρθες!</h1>
   <p class="text-sm text-[var(--app-text-secondary)]">
     Ρόλοι: {{ authService.user()?.roles?.join(', ') }}
   </p>
 
-  <a
-    routerLink="/class-types"
-    class="flex items-center gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 hover:border-[var(--app-accent)] transition-colors"
-  >
+  <a routerLink="/class-types" class="app-card app-card--interactive flex items-center gap-3 no-underline">
     <mat-icon class="text-[var(--app-accent)]">category</mat-icon>
     <span class="text-white">Είδη μαθημάτων</span>
   </a>
 
-  <a
-    routerLink="/sessions"
-    class="flex items-center gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 hover:border-[var(--app-accent)] transition-colors"
-  >
+  <a routerLink="/sessions" class="app-card app-card--interactive flex items-center gap-3 no-underline">
     <mat-icon class="text-[var(--app-accent)]">event</mat-icon>
     <span class="text-white">Ώρες μαθημάτων</span>
+  </a>
+
+  <a routerLink="/memberships" class="app-card app-card--interactive flex items-center gap-3 no-underline">
+    <mat-icon class="text-[var(--app-accent)]">card_membership</mat-icon>
+    <span class="text-white">Συνδρομές</span>
   </a>
 </div>

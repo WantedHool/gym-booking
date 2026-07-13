@@ -5,11 +5,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { Router } from '@angular/router';
 import { AuthService } from '@frontend/auth';
+import { AccentBadge } from '@frontend/ui';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, AccentBadge],
   templateUrl: './login.html',
 })
 export class Login {

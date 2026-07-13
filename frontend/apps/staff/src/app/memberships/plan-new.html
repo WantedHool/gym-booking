@@ -1,0 +1,43 @@
+<div class="app-content-narrow">
+  <lib-page-header
+    title="Νέο πακέτο"
+    backLink="/memberships"
+    backLabel="Συνδρομές"
+    parentLink="/memberships"
+    parentLabel="Συνδρομές"
+  />
+
+  <form [formGroup]="planForm" (ngSubmit)="createPlan()" class="flex flex-col gap-4">
+    <mat-form-field appearance="outline">
+      <mat-label>Όνομα</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Τύπος</mat-label>
+      <mat-select formControlName="type">
+        <mat-option value="SessionPack">SessionPack</mat-option>
+        <mat-option value="Unlimited">Unlimited</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Προπονήσεις (SessionPack)</mat-label>
+      <input matInput type="number" formControlName="sessionsCount" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Διάρκεια (ημέρες)</mat-label>
+      <input matInput type="number" formControlName="durationDays" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Τιμή (€)</mat-label>
+      <input matInput type="number" formControlName="price" />
+    </mat-form-field>
+
+    @if (errorMessage(); as message) {
+      <p class="text-sm text-red-400">{{ message }}</p>
+    }
+
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      Δημιουργία πακέτου
+    </button>
+  </form>
+</div>

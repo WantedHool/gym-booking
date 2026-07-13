@@ -1,0 +1,7 @@
+<div class="flex flex-col items-center gap-2 py-6 text-center">
+  <mat-icon class="app-text-muted !w-10 !h-10 !text-[40px]">{{ icon() }}</mat-icon>
+  <p class="app-text-muted text-sm">{{ message() }}</p>
+  @if (ctaLink(); as link) {
+    <a mat-flat-button color="primary" [routerLink]="link">{{ ctaLabel() }}</a>
+  }
+</div>

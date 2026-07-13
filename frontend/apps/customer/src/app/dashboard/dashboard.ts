@@ -1,31 +1,48 @@
-import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '@frontend/auth';
-import { BookingApiService } from '@frontend/data-access';
-import { Booking } from '@frontend/models';
+import { BookingsStore, SubscriptionApiService } from '@frontend/data-access';
+import { Subscription } from '@frontend/models';
+import {
+  BookingCard,
+  CUSTOMER_DATE_FORMATS,
+  EmptyState,
+  ListSkeleton,
+  PageHeader,
+} from '@frontend/ui';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [DatePipe, MatIconModule, RouterLink],
+  imports: [DatePipe, MatIconModule, RouterLink, PageHeader, BookingCard, EmptyState, ListSkeleton],
   templateUrl: './dashboard.html',
 })
-export class Dashboard {
-  protected readonly authService = inject(AuthService);
-  private readonly bookingApi = inject(BookingApiService);
+export class Dashboard implements OnInit {
+  protected readonly dateFormats = CUSTOMER_DATE_FORMATS;
+  protected readonly bookingsStore = inject(BookingsStore);
+  private readonly subscriptionApi = inject(SubscriptionApiService);
 
-  private readonly bookings = signal<Booking[]>([]);
+  protected readonly upcoming = this.bookingsStore.upcoming;
+  protected readonly subscription = signal<Subscription | null>(null);
+  protected readonly subscriptionLoading = signal(false);
 
-  protected readonly upcoming = computed(() =>
-    this.bookings().filter((b) => b.status === 'Confirmed' && new Date(b.startsAt).getTime() >= Date.now()),
-  );
-  protected readonly history = computed(() =>
-    this.bookings().filter((b) => b.status !== 'Confirmed' || new Date(b.startsAt).getTime() < Date.now()),
-  );
+  ngOnInit(): void {
+    this.bookingsStore.load();
+    this.subscriptionLoading.set(true);
+    this.subscriptionApi.getMine().subscribe({
+      next: (s) => {
+        this.subscription.set(s);
+        this.subscriptionLoading.set(false);
+      },
+      error: () => this.subscriptionLoading.set(false),
+    });
+  }
 
-  constructor() {
-    this.bookingApi.getMine().subscribe((x) => this.bookings.set(x));
+  protected subscriptionProgress(sub: Subscription): number {
+    if (!sub.sessionsTotal || sub.remainingSessions === null) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, (sub.remainingSessions / sub.sessionsTotal) * 100));
   }
 }

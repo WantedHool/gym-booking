@@ -86,6 +86,7 @@ public class BookingEndpointsTests
     {
         var user = await CreateUserAsync("booker@demo.gym", "Test1234!", Roles.User);
         var sessionId = await SeedSessionForTenantAsync(user.TenantId, capacity: 5);
+        await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);
 
         var client = _factory.CreateClient();
         var token = await LoginAsync(client, "booker@demo.gym", "Test1234!");
@@ -104,6 +105,8 @@ public class BookingEndpointsTests
         var user = await CreateUserAsync("booker-full@demo.gym", "Test1234!", Roles.User);
         var sessionId = await SeedSessionForTenantAsync(user.TenantId, capacity: 1);
         var other = await CreateUserAsync("booker-first@demo.gym", "Test1234!", Roles.User);
+        await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);
+        await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, other.Id);
 
         // Ο "other" πρέπει να είναι στο ΙΔΙΟ tenant για να δει το session — απλούστερο: γέμισε το session
         // απευθείας μέσω του service σε scope του tenant.
@@ -111,7 +114,7 @@ public class BookingEndpointsTests
         {
             scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(user.TenantId);
             var svc = scope.ServiceProvider.GetRequiredService<GymBooking.Api.Services.BookingService>();
-            await svc.BookAsync(Guid.NewGuid(), sessionId);
+            await svc.BookAsync(other.Id, sessionId);
         }
 
         var client = _factory.CreateClient();

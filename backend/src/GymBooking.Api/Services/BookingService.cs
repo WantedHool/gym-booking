@@ -76,6 +76,28 @@ public class BookingService
                 return (BookingOutcome.SessionFull, null);
             }
 
+            // --- Φ5: consumption συνδρομής (κλείδωμα της γραμμής subscription μέσα στο ίδιο tx) ---
+            var subscription = await _dbContext.Subscriptions
+                .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""UserId"" = {userId} AND ""TenantId"" = {tenantId} AND ""Status"" = 0 ORDER BY ""ValidFrom"" DESC LIMIT 1 FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
+
+            var now = DateTime.UtcNow;
+            var usable = subscription is not null
+                && subscription.ValidFrom <= now && now <= subscription.ValidTo
+                && (subscription.RemainingSessions == null || subscription.RemainingSessions > 0);
+            if (!usable)
+            {
+                return (BookingOutcome.NoSubscription, null);
+            }
+
+            if (subscription!.RemainingSessions != null)
+            {
+                subscription.RemainingSessions -= 1; // SessionPack
+            }
+            // --- τέλος consumption ---
+
             var booking = new Booking
             {
                 Id = Guid.NewGuid(),
@@ -83,7 +105,8 @@ public class BookingService
                 UserId = userId,
                 ClassSessionId = classSessionId,
                 Status = BookingStatus.Confirmed,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = now,
+                SubscriptionId = subscription.Id, // Φ5: για ακριβές refund
             };
             _dbContext.Bookings.Add(booking);
             session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount
@@ -127,6 +150,20 @@ public class BookingService
             if (session is not null && session.BookedCount > 0)
             {
                 session.BookedCount -= 1; // επιστροφή θέσης
+            }
+
+            // Φ5: refund θέσης προπόνησης στη συνδρομή που καταναλώθηκε (SessionPack μόνο).
+            if (booking.SubscriptionId is Guid subId)
+            {
+                var subscription = await _dbContext.Subscriptions
+                    .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""Id"" = {subId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                    .IgnoreQueryFilters()
+                    .AsTracking()
+                    .FirstOrDefaultAsync();
+                if (subscription is not null && subscription.RemainingSessions != null)
+                {
+                    subscription.RemainingSessions += 1;
+                }
             }
 
             await _dbContext.SaveChangesAsync();

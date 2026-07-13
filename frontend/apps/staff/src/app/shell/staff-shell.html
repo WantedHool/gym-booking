@@ -6,7 +6,8 @@
           <mat-icon>menu</mat-icon>
         </button>
       }
-      <span class="font-semibold text-white">🏋 GymBooking</span>
+      <a routerLink="/dashboard" class="font-semibold text-white no-underline hover:opacity-80 transition-opacity">🏋 GymBooking</a>
+      <span class="app-badge">Προσωπικό</span>
     </div>
     <button mat-icon-button [matMenuTriggerFor]="userMenu" aria-label="Μενού χρήστη">
       <mat-icon>account_circle</mat-icon>
@@ -24,42 +25,66 @@
       #drawer
       [mode]="isNarrow() ? 'over' : 'side'"
       [opened]="!isNarrow()"
+      [autoFocus]="false"
       class="w-56 bg-[var(--app-bg-nav)] border-r border-[var(--app-border)]"
     >
       <mat-nav-list>
         <a
           mat-list-item
           routerLink="/dashboard"
-          routerLinkActive="text-[var(--app-accent)]"
+          routerLinkActive
+          #rlaHome="routerLinkActive"
           [routerLinkActiveOptions]="{ exact: true }"
+          [activated]="rlaHome.isActive"
           (click)="isNarrow() && drawer.close()"
         >
-          Αρχική
+          <mat-icon matListItemIcon>home</mat-icon>
+          <span matListItemTitle>Αρχική</span>
         </a>
         <a
           mat-list-item
           routerLink="/class-types"
-          routerLinkActive="text-[var(--app-accent)]"
+          routerLinkActive
+          #rlaClassTypes="routerLinkActive"
+          [activated]="rlaClassTypes.isActive"
           (click)="isNarrow() && drawer.close()"
         >
-          Είδη μαθημάτων
+          <mat-icon matListItemIcon>category</mat-icon>
+          <span matListItemTitle>Είδη μαθημάτων</span>
         </a>
         <a
           mat-list-item
           routerLink="/sessions"
-          routerLinkActive="text-[var(--app-accent)]"
+          routerLinkActive
+          #rlaSessions="routerLinkActive"
+          [activated]="rlaSessions.isActive"
           (click)="isNarrow() && drawer.close()"
         >
-          Sessions
+          <mat-icon matListItemIcon>event</mat-icon>
+          <span matListItemTitle>Ώρες μαθημάτων</span>
         </a>
         @if (isAdmin()) {
           <a
             mat-list-item
             routerLink="/invitations"
-            routerLinkActive="text-[var(--app-accent)]"
+            routerLinkActive
+            #rlaInvitations="routerLinkActive"
+            [activated]="rlaInvitations.isActive"
             (click)="isNarrow() && drawer.close()"
           >
-            Προσκλήσεις
+            <mat-icon matListItemIcon>mail</mat-icon>
+            <span matListItemTitle>Προσκλήσεις</span>
+          </a>
+          <a
+            mat-list-item
+            routerLink="/memberships"
+            routerLinkActive
+            #rlaMemberships="routerLinkActive"
+            [activated]="rlaMemberships.isActive"
+            (click)="isNarrow() && drawer.close()"
+          >
+            <mat-icon matListItemIcon>card_membership</mat-icon>
+            <span matListItemTitle>Συνδρομές</span>
           </a>
         }
       </mat-nav-list>

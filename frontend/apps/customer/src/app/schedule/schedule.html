@@ -1,17 +1,19 @@
-<div class="flex flex-col gap-4">
-  <div class="flex items-center justify-between gap-2">
+<div class="app-page">
+  <lib-page-header title="Πρόγραμμα" />
+
+  <div class="app-card-padded flex items-center justify-between gap-2 !p-2">
     <button mat-icon-button (click)="changeWeek(-7)" aria-label="Προηγούμενη εβδομάδα">
       <mat-icon>chevron_left</mat-icon>
     </button>
     <span class="font-semibold text-white">
-      {{ weekStart() | date: 'dd/MM' }} – {{ weekEnd() | date: 'dd/MM' }}
+      {{ weekStart() | date: dateFormats.weekRange }} – {{ weekEnd() | date: dateFormats.weekRange }}
     </span>
     <button mat-icon-button (click)="changeWeek(7)" aria-label="Επόμενη εβδομάδα">
       <mat-icon>chevron_right</mat-icon>
     </button>
   </div>
 
-  <div class="flex gap-3 flex-wrap">
+  <div class="app-sticky-bar flex gap-3 flex-wrap">
     <mat-form-field class="flex-1 min-w-[140px]">
       <mat-label>Είδος</mat-label>
       <mat-select [ngModel]="classTypeId()" (ngModelChange)="classTypeId.set($event); load()">
@@ -33,28 +35,23 @@
   </div>
 
   @if (message(); as m) {
-    <p class="text-red-400">{{ m }}</p>
+    <lib-error-banner [message]="m" />
   }
 
-  <div class="flex flex-col gap-3">
-    @for (s of sessions(); track s.id) {
-      <div class="flex items-center justify-between gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4">
-        <div class="text-sm text-white">
-          <div class="font-medium">{{ s.classTypeName }} — {{ s.instructorName }}</div>
-          <div class="text-[var(--app-text-secondary)]">
-            {{ s.startsAt | date: 'EEE dd/MM HH:mm' }} — {{ s.bookedCount }}/{{ s.capacity }}
-          </div>
-        </div>
-        @if (s.isBookedByMe) {
-          <button mat-button color="warn" (click)="cancel(s)">Ακύρωση</button>
-        } @else {
-          <button mat-flat-button color="primary" [disabled]="s.bookedCount >= s.capacity" (click)="book(s)">
-            Κράτηση
-          </button>
-        }
-      </div>
-    } @empty {
-      <p class="text-[var(--app-text-secondary)]">Δεν υπάρχουν μαθήματα αυτή την εβδομάδα.</p>
-    }
-  </div>
+  @if (loading()) {
+    <lib-list-skeleton [count]="4" />
+  } @else {
+    <div class="flex flex-col gap-3">
+      @for (s of sessions(); track s.id) {
+        <lib-session-card
+          [session]="s"
+          [dateFormat]="dateFormats.session"
+          (bookSession)="book($event)"
+          (cancelSession)="cancel($event)"
+        />
+      } @empty {
+        <lib-empty-state icon="event_busy" message="Δεν υπάρχουν μαθήματα αυτή την εβδομάδα." />
+      }
+    </div>
+  }
 </div>

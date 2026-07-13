@@ -5,11 +5,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { InvitationApiService } from '@frontend/data-access';
+import { PageHeader } from '@frontend/ui';
 
 @Component({
   selector: 'app-invitations',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, PageHeader],
   templateUrl: './invitations.html',
 })
 export class Invitations {

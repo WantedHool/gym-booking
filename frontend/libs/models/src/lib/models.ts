@@ -101,3 +101,38 @@ export interface ScheduleQuery {
   classTypeId?: string;
   instructorId?: string;
 }
+
+export type PlanType = 'SessionPack' | 'Unlimited';
+
+export interface MembershipPlan {
+  id: string;
+  name: string;
+  type: PlanType;
+  sessionsCount: number;
+  durationDays: number;
+  price: number;
+  isActive: boolean;
+}
+
+export interface CreatePlanRequest {
+  name: string;
+  type: PlanType;
+  sessionsCount: number;
+  durationDays: number;
+  price: number;
+}
+
+export interface AssignSubscriptionRequest {
+  email: string;
+  planId: string;
+}
+
+export interface Subscription {
+  id: string;
+  planName: string;
+  type: PlanType;
+  remainingSessions: number | null;
+  sessionsTotal: number | null;
+  validFrom: string;
+  validTo: string;
+}

@@ -1,0 +1,11 @@
+<div class="app-card-compact">
+  <div class="flex items-start justify-between gap-2">
+    <div class="font-medium min-w-0">{{ booking().classTypeName }}</div>
+    @if (showStatus()) {
+      <lib-status-badge class="shrink-0" [status]="booking().status" />
+    }
+  </div>
+  <div class="app-text-muted mt-1">
+    {{ booking().startsAt | date: dateFormat() }}
+  </div>
+</div>

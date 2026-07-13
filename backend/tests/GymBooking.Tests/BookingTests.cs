@@ -73,8 +73,10 @@ public class BookingTests
     public async Task Book_available_session_succeeds_and_increments_bookedCount()
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
 
-        var (outcome, booking) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+        var (outcome, booking) = await BookAsync(tenantId, userId, sessionId);
 
         Assert.Equal(BookingOutcome.Success, outcome);
         Assert.NotNull(booking);
@@ -85,7 +87,9 @@ public class BookingTests
     public async Task Book_full_session_returns_SessionFull()
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
-        await BookAsync(tenantId, Guid.NewGuid(), sessionId); // γεμίζει
+        var fillerId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, fillerId);
+        await BookAsync(tenantId, fillerId, sessionId); // γεμίζει
 
         var (outcome, _) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
 
@@ -131,6 +135,7 @@ public class BookingTests
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
         var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
         await BookAsync(tenantId, userId, sessionId);
 
         var (outcome, _) = await BookAsync(tenantId, userId, sessionId);
@@ -145,6 +150,7 @@ public class BookingTests
         var (tenantId, sessionA) = await SeedSessionAsync(capacity: 5, startsAtUtc: start, durationMinutes: 60);
         var sessionB = await SeedAnotherSessionAsync(tenantId, start.AddMinutes(30), durationMinutes: 60); // 30' επικάλυψη
         var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
         await BookAsync(tenantId, userId, sessionA);
 
         var (outcome, _) = await BookAsync(tenantId, userId, sessionB);
@@ -165,6 +171,7 @@ public class BookingTests
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
         var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
         var (_, booking) = await BookAsync(tenantId, userId, sessionId);
         Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
 
@@ -181,7 +188,9 @@ public class BookingTests
     public async Task Cancel_someone_elses_booking_is_rejected()
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
-        var (_, booking) = await BookAsync(tenantId, Guid.NewGuid(), sessionId);
+        var bookerId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, bookerId);
+        var (_, booking) = await BookAsync(tenantId, bookerId, sessionId);
 
         var (outcome, _) = await CancelAsync(tenantId, Guid.NewGuid(), booking!.Id); // άλλος χρήστης
 
@@ -196,9 +205,15 @@ public class BookingTests
         const int attempts = 12;
         var (tenantId, sessionId) = await SeedSessionAsync(capacity, DateTime.UtcNow.AddDays(1));
 
+        var userIds = Enumerable.Range(0, attempts).Select(_ => Guid.NewGuid()).ToArray();
+        foreach (var uid in userIds)
+        {
+            await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, uid);
+        }
+
         // 12 διαφορετικοί χρήστες κρατούν ΤΑΥΤΟΧΡΟΝΑ την ίδια (capacity=3) ώρα.
-        var tasks = Enumerable.Range(0, attempts)
-            .Select(_ => BookAsync(tenantId, Guid.NewGuid(), sessionId))
+        var tasks = userIds
+            .Select(uid => BookAsync(tenantId, uid, sessionId))
             .ToArray();
         var results = await Task.WhenAll(tasks);
 

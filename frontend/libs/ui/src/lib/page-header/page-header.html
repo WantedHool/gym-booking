@@ -1,0 +1,27 @@
+@if (parentLink(); as link) {
+  @if (parentLabel(); as label) {
+    <nav aria-label="Breadcrumb" class="text-xs text-[var(--app-text-secondary)] mb-1 flex items-center gap-1">
+      <a [routerLink]="link" class="hover:text-[var(--app-accent)] transition-colors no-underline">{{ label }}</a>
+      <mat-icon class="!text-sm !w-4 !h-4">chevron_right</mat-icon>
+      <span class="text-white/70">{{ title() }}</span>
+    </nav>
+  }
+}
+<header class="flex items-center justify-between gap-4 mb-6">
+  <div class="flex items-center gap-1 min-w-0">
+    @if (backLink(); as back) {
+      <button
+        mat-icon-button
+        [routerLink]="back"
+        [attr.aria-label]="backLabel()"
+        class="shrink-0 -ml-2"
+      >
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+    }
+    <h1 class="text-2xl font-bold text-white truncate">{{ title() }}</h1>
+  </div>
+  <div class="shrink-0">
+    <ng-content />
+  </div>
+</header>

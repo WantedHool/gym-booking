@@ -1,1 +1,51 @@
 @import 'tailwindcss';
+
+@utility app-page {
+  @apply flex flex-col gap-4;
+}
+
+@utility app-card {
+  @apply bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg text-sm text-white;
+}
+
+@utility app-card-padded {
+  @apply app-card p-4;
+}
+
+@utility app-card-compact {
+  @apply app-card p-3;
+}
+
+@utility app-card-hover {
+  @apply app-card-padded flex items-center gap-3 hover:border-[var(--app-accent)] transition-colors;
+}
+
+@utility app-text-muted {
+  @apply text-[var(--app-text-secondary)];
+}
+
+@utility app-badge-accent {
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
+  color: var(--app-accent);
+}
+
+@utility app-nav-tab {
+  @apply flex-1 flex flex-col items-center gap-0.5 py-2 text-xs rounded-lg mx-1 text-[var(--app-text-secondary)];
+}
+
+@utility app-nav-active {
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+@utility app-section-title {
+  @apply text-lg font-bold text-white mb-2;
+}
+
+@utility app-page-title {
+  @apply text-2xl font-bold text-white;
+}
+
+@utility app-sticky-bar {
+  @apply sticky top-0 z-10 -mx-4 px-4 py-2 mb-2 bg-[var(--app-bg-page)] border-b border-[var(--app-border)];
+}

@@ -8,4 +8,5 @@ public enum BookingOutcome
     SessionFull,
     AlreadyBooked,
     TimeConflict,
+    NoSubscription,
 }

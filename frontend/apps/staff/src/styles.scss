@@ -5,8 +5,8 @@ html {
   @include mat.theme((
     color: (
       theme-type: dark,
-      primary: mat.$chartreuse-palette,
-      tertiary: mat.$chartreuse-palette,
+      primary: mat.$violet-palette,
+      tertiary: mat.$violet-palette,
     ),
     typography: Roboto,
     density: 0,
@@ -19,8 +19,57 @@ html {
   --app-bg-nav: #1a1c22;
   --app-border: #33353c;
   --app-text-secondary: #8a8d95;
-  --app-accent: #c6ff3d;
+  --app-accent: #a97bff;
   --mat-sys-primary: var(--app-accent);
+  --app-content-narrow: 32rem;
+  --app-content-default: 42rem;
+  --app-content-dashboard: 36rem;
+}
+
+.app-content {
+  max-width: var(--app-content-default);
+}
+
+.app-content-narrow {
+  max-width: var(--app-content-narrow);
+}
+
+.app-content-dashboard {
+  max-width: var(--app-content-dashboard);
+}
+
+.app-card {
+  background: var(--app-bg-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: border-color 0.15s ease;
+}
+
+.app-card--interactive:hover {
+  border-color: var(--app-accent);
+}
+
+.app-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
+  color: var(--app-accent);
+}
+
+.app-badge--md {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.app-empty-state {
+  text-align: center;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  color: var(--app-text-secondary);
 }
 
 body {
@@ -55,4 +104,46 @@ body {
 .mat-mdc-form-field-flex {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+// Sidebar nav — active item highlight
+.mat-mdc-nav-list {
+  padding: 0.5rem !important;
+}
+
+.mat-mdc-nav-list .mat-mdc-list-item[activated] {
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent) !important;
+  border-radius: 8px;
+
+  .mdc-list-item__primary-text,
+  .mat-mdc-list-item-icon {
+    color: var(--app-accent) !important;
+  }
+}
+
+.app-paginator {
+  background: transparent;
+  color: var(--app-text-secondary);
+
+  .mat-mdc-paginator-container {
+    padding: 0.25rem 0;
+    min-height: 48px;
+  }
+
+  @media (max-width: 640px) {
+    .mat-mdc-paginator-container {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.25rem;
+      min-height: auto;
+    }
+
+    .mat-mdc-paginator-page-size {
+      margin-right: 0;
+    }
+
+    .mat-mdc-paginator-range-actions {
+      margin-left: 0;
+    }
+  }
 }

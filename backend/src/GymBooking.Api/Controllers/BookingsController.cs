@@ -38,6 +38,7 @@ public class BookingsController : ControllerBase
             BookingOutcome.SessionFull => Conflict("Το session είναι πλήρες."),
             BookingOutcome.AlreadyBooked => Conflict("Έχεις ήδη κράτηση σε αυτό το session."),
             BookingOutcome.TimeConflict => Conflict("Έχεις άλλη κράτηση που επικαλύπτεται χρονικά."),
+            BookingOutcome.NoSubscription => Conflict("Δεν έχεις ενεργή συνδρομή."),
             _ => BadRequest(),
         };
     }

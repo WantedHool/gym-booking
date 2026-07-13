@@ -8,7 +8,10 @@
 
   <div class="flex flex-1 items-center justify-center p-4 lg:p-12 bg-[var(--app-bg-page)]">
     <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
-      <h2 class="text-xl font-medium text-center text-white">Σύνδεση</h2>
+      <div class="text-center flex flex-col items-center gap-2">
+        <h2 class="text-xl font-medium text-white">Σύνδεση</h2>
+        <lib-accent-badge size="md">Πύλη Πελατών</lib-accent-badge>
+      </div>
 
       <mat-form-field appearance="outline" class="w-full">
         <mat-label>Email</mat-label>

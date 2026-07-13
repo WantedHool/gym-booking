@@ -1,0 +1,49 @@
+<div class="app-content-narrow">
+  <lib-page-header
+    title="Νέο session"
+    backLink="/sessions"
+    backLabel="Ώρες μαθημάτων"
+    parentLink="/sessions"
+    parentLabel="Ώρες μαθημάτων"
+  />
+
+  <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+    <mat-form-field appearance="outline">
+      <mat-label>Είδος μαθήματος</mat-label>
+      <mat-select formControlName="classTypeId">
+        @for (ct of classTypes(); track ct.id) {
+          <mat-option [value]="ct.id">{{ ct.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <div class="flex gap-4">
+      <mat-form-field appearance="outline" class="flex-1">
+        <mat-label>Ημερομηνία</mat-label>
+        <input matInput [matDatepicker]="picker" formControlName="startsDate" (click)="picker.open()" />
+        <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="w-40">
+        <mat-label>Ώρα</mat-label>
+        <input matInput [matTimepicker]="timepicker" formControlName="startsTime" />
+        <mat-timepicker-toggle matIconSuffix [for]="timepicker"></mat-timepicker-toggle>
+        <mat-timepicker #timepicker interval="15m"></mat-timepicker>
+      </mat-form-field>
+    </div>
+    <mat-form-field appearance="outline">
+      <mat-label>Διάρκεια (λεπτά)</mat-label>
+      <input matInput type="number" formControlName="durationMinutes" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Χωρητικότητα</mat-label>
+      <input matInput type="number" formControlName="capacity" />
+    </mat-form-field>
+    @if (errorMessage(); as message) {
+      <p class="text-sm text-red-400">{{ message }}</p>
+    }
+
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      Δημιουργία session
+    </button>
+  </form>
+</div>

@@ -8,6 +8,7 @@ public class Booking
     public Guid TenantId { get; set; }
     public Guid UserId { get; set; }
     public Guid ClassSessionId { get; set; }
+    public Guid? SubscriptionId { get; set; }
     public BookingStatus Status { get; set; } = BookingStatus.Confirmed;
     public DateTime CreatedAt { get; set; }
     public DateTime? CancelledAt { get; set; }

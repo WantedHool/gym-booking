@@ -149,6 +149,9 @@ namespace GymBooking.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("SubscriptionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -263,6 +266,71 @@ namespace GymBooking.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Invitations");
+                });
+
+            modelBuilder.Entity("GymBooking.Core.Entities.Models.MembershipPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("SessionsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MembershipPlans");
+                });
+
+            modelBuilder.Entity("GymBooking.Core.Entities.Models.Subscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MembershipPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("RemainingSessions")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ValidTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("GymBooking.Core.Entities.Models.Tenant", b =>

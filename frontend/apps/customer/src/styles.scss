@@ -5,8 +5,8 @@ html {
   @include mat.theme((
     color: (
       theme-type: dark,
-      primary: mat.$chartreuse-palette,
-      tertiary: mat.$chartreuse-palette,
+      primary: mat.$green-palette,
+      tertiary: mat.$green-palette,
     ),
     typography: Roboto,
     density: 0,
@@ -18,7 +18,7 @@ html {
   --app-bg-surface: #1e2026;
   --app-border: #33353c;
   --app-text-secondary: #8a8d95;
-  --app-accent: #c6ff3d;
+  --app-accent: #3ddc84;
   --mat-sys-primary: var(--app-accent);
 }
 
@@ -54,4 +54,120 @@ body {
 .mat-mdc-form-field-flex {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+a.app-nav-active .mat-icon {
+  color: inherit;
+}
+
+.app-status-badge--confirmed {
+  background: color-mix(in srgb, var(--app-accent) 18%, transparent);
+  color: var(--app-accent);
+}
+
+.app-status-badge--cancelled {
+  background: color-mix(in srgb, #f87171 18%, transparent);
+  color: #f87171;
+}
+
+.app-status-badge--default {
+  background: color-mix(in srgb, var(--app-text-secondary) 18%, transparent);
+  color: var(--app-text-secondary);
+}
+
+.app-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, #f87171 40%, transparent);
+  background: color-mix(in srgb, #f87171 12%, transparent);
+  color: #fca5a5;
+  font-size: 0.875rem;
+}
+
+.app-skeleton-card {
+  background: var(--app-bg-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.app-skeleton-line {
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    var(--app-border) 25%,
+    color-mix(in srgb, var(--app-border) 60%, var(--app-bg-surface)) 50%,
+    var(--app-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: app-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.app-skeleton-line--title {
+  height: 0.875rem;
+  width: 55%;
+  margin-bottom: 0.5rem;
+}
+
+.app-skeleton-line--subtitle {
+  height: 0.75rem;
+  width: 40%;
+}
+
+@keyframes app-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.app-subscription-progress {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--app-border);
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.app-subscription-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--app-accent);
+  transition: width 0.2s ease;
+}
+
+.app-subscription-progress--low .app-subscription-progress__fill {
+  background: #f87171;
+}
+
+.app-paginator {
+  background: transparent;
+  color: var(--app-text-secondary);
+
+  .mat-mdc-paginator-container {
+    padding: 0.25rem 0;
+    min-height: 48px;
+  }
+
+  @media (max-width: 640px) {
+    .mat-mdc-paginator-container {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.25rem;
+      min-height: auto;
+    }
+
+    .mat-mdc-paginator-page-size {
+      margin-right: 0;
+    }
+
+    .mat-mdc-paginator-range-actions {
+      margin-left: 0;
+    }
+  }
 }

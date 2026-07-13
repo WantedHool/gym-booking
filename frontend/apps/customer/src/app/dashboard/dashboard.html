@@ -1,44 +1,68 @@
-<div class="flex flex-col gap-4">
-  <h1 class="text-2xl font-bold text-white">Καλωσήρθες!</h1>
-  <p class="text-sm text-[var(--app-text-secondary)]">
-    Ρόλοι: {{ authService.user()?.roles?.join(', ') }}
-  </p>
+<div class="app-page">
+  <lib-page-header title="Καλωσήρθες!" />
 
-  <a
-    routerLink="/schedule"
-    class="flex items-center gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 hover:border-[var(--app-accent)] transition-colors"
-  >
+  <a routerLink="/schedule" class="app-card-hover">
     <mat-icon class="text-[var(--app-accent)]">event</mat-icon>
     <span class="text-white">Πρόγραμμα</span>
   </a>
 
-  <div>
-    <h2 class="text-lg font-bold text-white mb-2">Επερχόμενες κρατήσεις</h2>
-    <div class="flex flex-col gap-2">
-      @for (b of upcoming(); track b.id) {
-        <div class="bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-3 text-sm text-white">
-          <div class="font-medium">{{ b.classTypeName }}</div>
-          <div class="text-[var(--app-text-secondary)]">{{ b.startsAt | date: 'EEE dd/MM HH:mm' }}</div>
+  <div class="app-card-padded">
+    <h2 class="app-section-title">Η συνδρομή μου</h2>
+    @if (subscriptionLoading()) {
+      <lib-list-skeleton [count]="1" />
+    } @else if (subscription(); as sub) {
+      <div class="font-medium">{{ sub.planName }} ({{ sub.type }})</div>
+      @if (sub.type === 'SessionPack') {
+        <div class="mt-2">
+          <div class="app-text-muted">
+            Απομένουν
+            <strong [class]="sub.remainingSessions === 0 ? 'text-red-400' : 'text-white'">
+              {{ sub.remainingSessions ?? 0 }}
+            </strong>
+            @if (sub.sessionsTotal) {
+              / {{ sub.sessionsTotal }}
+            }
+            προπονήσεις
+          </div>
+          @if (sub.sessionsTotal) {
+            <div
+              class="app-subscription-progress"
+              [class.app-subscription-progress--low]="(sub.remainingSessions ?? 0) <= 2"
+            >
+              <div
+                class="app-subscription-progress__fill"
+                [style.width.%]="subscriptionProgress(sub)"
+              ></div>
+            </div>
+          }
+          @if (sub.remainingSessions === 0) {
+            <p class="text-red-400 text-xs mt-2">Εξαντλήθηκε! Απευθύνσου στη γραμματεία για ανανέωση.</p>
+          }
         </div>
-      } @empty {
-        <p class="text-[var(--app-text-secondary)] text-sm">Καμία επερχόμενη κράτηση.</p>
       }
-    </div>
+      <div class="app-text-muted mt-2">Ισχύει έως: {{ sub.validTo | date: dateFormats.dateOnly }}</div>
+    } @else {
+      <p class="app-text-muted">Δεν έχεις ενεργή συνδρομή. Απευθύνσου στη γραμματεία.</p>
+    }
   </div>
 
   <div>
-    <h2 class="text-lg font-bold text-white mb-2">Ιστορικό</h2>
-    <div class="flex flex-col gap-2">
-      @for (b of history(); track b.id) {
-        <div class="bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-3 text-sm text-white">
-          <div class="font-medium">{{ b.classTypeName }}</div>
-          <div class="text-[var(--app-text-secondary)]">
-            {{ b.startsAt | date: 'dd/MM/yyyy HH:mm' }} — {{ b.status }}
-          </div>
-        </div>
-      } @empty {
-        <p class="text-[var(--app-text-secondary)] text-sm">Κενό ιστορικό.</p>
-      }
-    </div>
+    <h2 class="app-section-title">Επερχόμενες κρατήσεις</h2>
+    @if (bookingsStore.loading()) {
+      <lib-list-skeleton [count]="3" />
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (b of upcoming(); track b.id) {
+          <lib-booking-card [booking]="b" [dateFormat]="dateFormats.session" />
+        } @empty {
+          <lib-empty-state
+            icon="event_busy"
+            message="Καμία επερχόμενη κράτηση."
+            ctaLink="/schedule"
+            ctaLabel="Δες το πρόγραμμα"
+          />
+        }
+      </div>
+    }
   </div>
 </div>

@@ -1,0 +1,76 @@
+<div class="app-content flex flex-col gap-8">
+  <div>
+    <lib-page-header title="Συνδρομές">
+      <button mat-flat-button color="primary" routerLink="/memberships/new">
+        <mat-icon>add</mat-icon>
+        Νέο πακέτο
+      </button>
+    </lib-page-header>
+
+    @if (errorMessage(); as message) {
+      <p class="text-sm text-red-400 mb-4">{{ message }}</p>
+    }
+
+    @if (plans().length === 0) {
+      <div class="app-card app-empty-state">
+        <mat-icon class="!text-4xl !w-10 !h-10 mb-2 opacity-40">card_membership</mat-icon>
+        <p>Δεν υπάρχουν πακέτα ακόμα.</p>
+        <button mat-stroked-button routerLink="/memberships/new" class="mt-3">
+          <mat-icon>add</mat-icon>
+          Δημιουργία πρώτου πακέτου
+        </button>
+      </div>
+    } @else {
+      <div class="flex flex-col gap-3">
+        @for (p of pagination.paginatedItems(); track p.id) {
+          <div class="app-card text-sm text-white">
+            <div class="font-medium">{{ p.name }}</div>
+            <div class="text-[var(--app-text-secondary)]">
+              {{ p.type }} — {{ p.durationDays }} ημέρες — {{ p.price }}€
+              @if (p.type === 'SessionPack') {
+                · {{ p.sessionsCount }} προπονήσεις
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <lib-list-paginator
+        class="mt-2 block"
+        [length]="plans().length"
+        [pageIndex]="pagination.pageIndex()"
+        [pageSize]="pagination.pageSize()"
+        (pageChange)="pagination.onPage($event)"
+      />
+    }
+  </div>
+
+  <div>
+    <h2 class="text-lg font-semibold text-white mb-2">Ανάθεση σε χρήστη</h2>
+    <form [formGroup]="assignForm" (ngSubmit)="assign()" class="flex flex-col gap-4">
+      <mat-form-field appearance="outline">
+        <mat-label>Email χρήστη</mat-label>
+        <input matInput type="email" formControlName="email" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Πακέτο</mat-label>
+        <mat-select formControlName="planId">
+          @for (p of plans(); track p.id) {
+            <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (assignError(); as message) {
+        <p class="text-sm text-red-400">{{ message }}</p>
+      }
+      @if (assignSuccess(); as message) {
+        <p class="text-sm text-green-400">{{ message }}</p>
+      }
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="assignSubmitting()">
+        Ανάθεση
+      </button>
+    </form>
+  </div>
+</div>
