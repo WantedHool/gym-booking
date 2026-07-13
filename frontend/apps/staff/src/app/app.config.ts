@@ -3,6 +3,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideNativeDateAdapter } from '@angular/material/core';
 import { provideRouter } from '@angular/router';
 import { jwtInterceptor } from '@frontend/auth';
 import { appRoutes } from './app.routes';
@@ -12,5 +13,6 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
     provideHttpClient(withInterceptors([jwtInterceptor])),
+    provideNativeDateAdapter(),
   ],
 };

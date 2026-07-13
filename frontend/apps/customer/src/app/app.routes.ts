@@ -4,7 +4,7 @@ import { CustomerShell } from './shell/customer-shell';
 import { Dashboard } from './dashboard/dashboard';
 import { Login } from './login/login';
 import { Register } from './register/register';
-import { Sessions } from './sessions/sessions';
+import { Schedule } from './schedule/schedule';
 
 export const appRoutes: Route[] = [
   { path: 'login', component: Login },
@@ -15,7 +15,7 @@ export const appRoutes: Route[] = [
     canActivate: [authGuard],
     children: [
       { path: 'dashboard', component: Dashboard },
-      { path: 'sessions', component: Sessions },
+      { path: 'schedule', component: Schedule },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
     ],
   },

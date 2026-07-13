@@ -1,0 +1,60 @@
+<div class="flex flex-col gap-4">
+  <div class="flex items-center justify-between gap-2">
+    <button mat-icon-button (click)="changeWeek(-7)" aria-label="Προηγούμενη εβδομάδα">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <span class="font-semibold text-white">
+      {{ weekStart() | date: 'dd/MM' }} – {{ weekEnd() | date: 'dd/MM' }}
+    </span>
+    <button mat-icon-button (click)="changeWeek(7)" aria-label="Επόμενη εβδομάδα">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+  </div>
+
+  <div class="flex gap-3 flex-wrap">
+    <mat-form-field class="flex-1 min-w-[140px]">
+      <mat-label>Είδος</mat-label>
+      <mat-select [ngModel]="classTypeId()" (ngModelChange)="classTypeId.set($event); load()">
+        <mat-option value="">Όλα</mat-option>
+        @for (ct of classTypes(); track ct.id) {
+          <mat-option [value]="ct.id">{{ ct.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field class="flex-1 min-w-[140px]">
+      <mat-label>Προπονητής</mat-label>
+      <mat-select [ngModel]="instructorId()" (ngModelChange)="instructorId.set($event); load()">
+        <mat-option value="">Όλοι</mat-option>
+        @for (i of instructors(); track i.id) {
+          <mat-option [value]="i.id">{{ i.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @if (message(); as m) {
+    <p class="text-red-400">{{ m }}</p>
+  }
+
+  <div class="flex flex-col gap-3">
+    @for (s of sessions(); track s.id) {
+      <div class="flex items-center justify-between gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4">
+        <div class="text-sm text-white">
+          <div class="font-medium">{{ s.classTypeName }} — {{ s.instructorName }}</div>
+          <div class="text-[var(--app-text-secondary)]">
+            {{ s.startsAt | date: 'EEE dd/MM HH:mm' }} — {{ s.bookedCount }}/{{ s.capacity }}
+          </div>
+        </div>
+        @if (s.isBookedByMe) {
+          <button mat-button color="warn" (click)="cancel(s)">Ακύρωση</button>
+        } @else {
+          <button mat-flat-button color="primary" [disabled]="s.bookedCount >= s.capacity" (click)="book(s)">
+            Κράτηση
+          </button>
+        }
+      </div>
+    } @empty {
+      <p class="text-[var(--app-text-secondary)]">Δεν υπάρχουν μαθήματα αυτή την εβδομάδα.</p>
+    }
+  </div>
+</div>

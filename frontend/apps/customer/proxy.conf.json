@@ -1,8 +1,0 @@
-{
-  "/auth": { "target": "http://localhost:5076", "secure": false },
-  "/invitations": { "target": "http://localhost:5076", "secure": false },
-  "/class-types": { "target": "http://localhost:5076", "secure": false },
-  "/class-sessions": { "target": "http://localhost:5076", "secure": false },
-  "/bookings": { "target": "http://localhost:5076", "secure": false },
-  "/health": { "target": "http://localhost:5076", "secure": false }
-}

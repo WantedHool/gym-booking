@@ -56,7 +56,7 @@
       "executor": "@angular/build:dev-server",
       "defaultConfiguration": "development",
       "options": {
-        "proxyConfig": "apps/customer/proxy.conf.json"
+        "proxyConfig": "apps/customer/proxy.conf.js"
       },
       "configurations": {
         "production": {

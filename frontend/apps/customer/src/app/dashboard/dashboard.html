@@ -5,10 +5,40 @@
   </p>
 
   <a
-    routerLink="/sessions"
+    routerLink="/schedule"
     class="flex items-center gap-3 bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-4 hover:border-[var(--app-accent)] transition-colors"
   >
     <mat-icon class="text-[var(--app-accent)]">event</mat-icon>
-    <span class="text-white">Μαθήματα</span>
+    <span class="text-white">Πρόγραμμα</span>
   </a>
+
+  <div>
+    <h2 class="text-lg font-bold text-white mb-2">Επερχόμενες κρατήσεις</h2>
+    <div class="flex flex-col gap-2">
+      @for (b of upcoming(); track b.id) {
+        <div class="bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-3 text-sm text-white">
+          <div class="font-medium">{{ b.classTypeName }}</div>
+          <div class="text-[var(--app-text-secondary)]">{{ b.startsAt | date: 'EEE dd/MM HH:mm' }}</div>
+        </div>
+      } @empty {
+        <p class="text-[var(--app-text-secondary)] text-sm">Καμία επερχόμενη κράτηση.</p>
+      }
+    </div>
+  </div>
+
+  <div>
+    <h2 class="text-lg font-bold text-white mb-2">Ιστορικό</h2>
+    <div class="flex flex-col gap-2">
+      @for (b of history(); track b.id) {
+        <div class="bg-[var(--app-bg-surface)] border border-[var(--app-border)] rounded-lg p-3 text-sm text-white">
+          <div class="font-medium">{{ b.classTypeName }}</div>
+          <div class="text-[var(--app-text-secondary)]">
+            {{ b.startsAt | date: 'dd/MM/yyyy HH:mm' }} — {{ b.status }}
+          </div>
+        </div>
+      } @empty {
+        <p class="text-[var(--app-text-secondary)] text-sm">Κενό ιστορικό.</p>
+      }
+    </div>
+  </div>
 </div>

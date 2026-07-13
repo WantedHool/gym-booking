@@ -114,6 +114,7 @@ builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<ClassTypeService>();
 builder.Services.AddScoped<ClassSessionService>();
 builder.Services.AddScoped<BookingService>();
+builder.Services.AddScoped<ScheduleService>();
 
 // Seed: 1 tenant + roles + 1 admin, μόνο σε άδεια βάση (βλ. κλήση seeder.SeedAsync() παρακάτω).
 var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()

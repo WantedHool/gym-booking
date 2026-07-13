@@ -9,7 +9,7 @@ namespace GymBooking.Api.Controllers;
 
 [ApiController]
 [Route("class-types")]
-[Authorize(Policy = Policies.RequireInstructor)]
+[Authorize]
 public class ClassTypesController : ControllerBase
 {
     private readonly ClassTypeService _service;
@@ -34,6 +34,7 @@ public class ClassTypesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = Policies.RequireInstructor)]
     public async Task<ActionResult<ClassTypeResponse>> Create([FromBody] CreateClassTypeRequest request)
     {
         if (Validate(request.Name, request.DefaultDurationMinutes, request.DefaultCapacity) is { } error)
@@ -46,6 +47,7 @@ public class ClassTypesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = Policies.RequireInstructor)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateClassTypeRequest request)
     {
         if (Validate(request.Name, request.DefaultDurationMinutes, request.DefaultCapacity) is { } error)
@@ -58,6 +60,7 @@ public class ClassTypesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = Policies.RequireInstructor)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var ok = await _service.DeactivateAsync(id);

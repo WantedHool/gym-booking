@@ -75,3 +75,29 @@ export interface CreateInvitationRequest {
   email: string;
   role: 'User' | 'Instructor';
 }
+
+export interface ScheduleSession {
+  id: string;
+  classTypeId: string;
+  classTypeName: string;
+  instructorId: string;
+  instructorName: string;
+  startsAt: string; // ISO UTC
+  durationMinutes: number;
+  capacity: number;
+  bookedCount: number;
+  isBookedByMe: boolean;
+  myBookingId: string | null;
+}
+
+export interface Instructor {
+  id: string;
+  name: string;
+}
+
+export interface ScheduleQuery {
+  from: string; // ISO UTC
+  to: string;   // ISO UTC
+  classTypeId?: string;
+  instructorId?: string;
+}
