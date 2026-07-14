@@ -1,11 +1,9 @@
 <div class="min-h-screen flex flex-col bg-[var(--app-bg-page)]">
   <header class="flex items-center justify-between px-4 py-3 bg-[var(--app-bg-surface)] border-b border-[var(--app-border)]">
     <div class="flex items-center gap-2">
-      @if (isNarrow()) {
-        <button mat-icon-button (click)="drawer.toggle()" aria-label="Μενού">
-          <mat-icon>menu</mat-icon>
-        </button>
-      }
+      <button mat-icon-button (click)="toggleSidenav()" aria-label="Μενού">
+        <mat-icon>menu</mat-icon>
+      </button>
       <a routerLink="/dashboard" class="font-semibold text-white no-underline hover:opacity-80 transition-opacity">🏋 GymBooking</a>
       <span class="app-badge">Προσωπικό</span>
     </div>
@@ -24,7 +22,8 @@
     <mat-sidenav
       #drawer
       [mode]="isNarrow() ? 'over' : 'side'"
-      [opened]="!isNarrow()"
+      [opened]="sidenavOpen()"
+      (openedChange)="sidenavOpen.set($event)"
       [autoFocus]="false"
       class="w-56 bg-[var(--app-bg-nav)] border-r border-[var(--app-border)]"
     >
@@ -66,6 +65,17 @@
         @if (isAdmin()) {
           <a
             mat-list-item
+            routerLink="/users"
+            routerLinkActive
+            #rlaUsers="routerLinkActive"
+            [activated]="rlaUsers.isActive"
+            (click)="isNarrow() && drawer.close()"
+          >
+            <mat-icon matListItemIcon>group</mat-icon>
+            <span matListItemTitle>Χρήστες</span>
+          </a>
+          <a
+            mat-list-item
             routerLink="/invitations"
             routerLinkActive
             #rlaInvitations="routerLinkActive"
@@ -85,6 +95,17 @@
           >
             <mat-icon matListItemIcon>card_membership</mat-icon>
             <span matListItemTitle>Συνδρομές</span>
+          </a>
+          <a
+            mat-list-item
+            routerLink="/settings"
+            routerLinkActive
+            #rlaSettings="routerLinkActive"
+            [activated]="rlaSettings.isActive"
+            (click)="isNarrow() && drawer.close()"
+          >
+            <mat-icon matListItemIcon>settings</mat-icon>
+            <span matListItemTitle>Ρυθμίσεις</span>
           </a>
         }
       </mat-nav-list>

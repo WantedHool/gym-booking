@@ -1,0 +1,26 @@
+<div class="app-content-narrow">
+  <lib-page-header title="Ρυθμίσεις" subtitle="Βασικές ρυθμίσεις γυμναστηρίου" />
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="flex flex-col gap-4">
+    <mat-form-field appearance="outline">
+      <mat-label>Όνομα γυμναστηρίου</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Ώρες πριν το μάθημα για ακύρωση</mat-label>
+      <input matInput type="number" formControlName="cancellationHours" min="0" />
+    </mat-form-field>
+
+    @if (successMessage()) {
+      <p class="text-sm text-green-400">{{ successMessage() }}</p>
+    }
+    @if (errorMessage()) {
+      <p class="text-sm text-red-400">{{ errorMessage() }}</p>
+    }
+
+    <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+      Αποθήκευση
+    </button>
+  </form>
+</div>

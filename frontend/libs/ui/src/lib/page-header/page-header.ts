@@ -10,6 +10,7 @@ import { RouterLink } from '@angular/router';
 })
 export class PageHeader {
   readonly title = input.required<string>();
+  readonly subtitle = input<string>();
   readonly backLink = input<string>();
   readonly backLabel = input('Πίσω');
   readonly parentLink = input<string>();

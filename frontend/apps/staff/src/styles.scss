@@ -16,7 +16,7 @@ html {
 :root {
   --app-bg-page: #15161a;
   --app-bg-surface: #1e2026;
-  --app-bg-nav: #1a1c22;
+  --app-bg-nav: #202329;
   --app-border: #33353c;
   --app-text-secondary: #8a8d95;
   --app-accent: #a97bff;
@@ -106,9 +106,28 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-// Sidebar nav — active item highlight
+// Sidebar nav — ξεχωρίζει από το περιεχόμενο (η default Material surface color νικάει την Tailwind utility class χωρίς !important)
+.mat-sidenav.mat-drawer {
+  background-color: var(--app-bg-nav) !important;
+}
+
 .mat-mdc-nav-list {
   padding: 0.5rem !important;
+}
+
+// Κενό ανάμεσα στα (pill-shaped) items αντί για διαχωριστική γραμμή — μια border-bottom
+// θα έκοβε άσχημα στις στρογγυλεμένες άκρες.
+.mat-mdc-nav-list .mat-mdc-list-item {
+  margin-bottom: 4px;
+}
+
+.mat-mdc-nav-list .mat-mdc-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.mat-mdc-nav-list .mat-mdc-list-item:not([activated]):hover {
+  background: color-mix(in srgb, var(--app-accent) 6%, transparent) !important;
+  border-radius: 8px;
 }
 
 .mat-mdc-nav-list .mat-mdc-list-item[activated] {

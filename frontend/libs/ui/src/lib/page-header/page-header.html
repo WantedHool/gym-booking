@@ -19,7 +19,12 @@
         <mat-icon>arrow_back</mat-icon>
       </button>
     }
-    <h1 class="text-2xl font-bold text-white truncate">{{ title() }}</h1>
+    <div class="min-w-0">
+      <h1 class="text-2xl font-bold text-white truncate">{{ title() }}</h1>
+      @if (subtitle(); as sub) {
+        <p class="text-sm text-[var(--app-text-secondary)] truncate">{{ sub }}</p>
+      }
+    </div>
   </div>
   <div class="shrink-0">
     <ng-content />

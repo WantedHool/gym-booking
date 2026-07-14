@@ -22,6 +22,9 @@ Thumbs.db
 # Claude Code local config
 .claude/
 
+# Serilog file sink output
+backend/src/GymBooking.Api/logs/
+
 # Docs — generated HTML (source of truth = .md)
 docs/*.html
 

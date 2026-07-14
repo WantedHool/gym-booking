@@ -1,0 +1,65 @@
+<div class="app-content-narrow">
+  @if (user(); as u) {
+    <lib-page-header
+      [title]="u.firstName + ' ' + u.lastName"
+      [subtitle]="u.email"
+      backLink="/users"
+      backLabel="Χρήστες"
+      parentLink="/users"
+      parentLabel="Χρήστες"
+    />
+
+    @if (errorMessage(); as message) {
+      <p class="text-sm text-red-400 mb-4">{{ message }}</p>
+    }
+    @if (successMessage(); as message) {
+      <p class="text-sm text-green-400 mb-4">{{ message }}</p>
+    }
+
+    @if (isSelf) {
+      <p class="text-sm text-[var(--app-text-secondary)] mb-4">
+        Δεν μπορείς να αλλάξεις τον δικό σου ρόλο ή κατάσταση.
+      </p>
+    }
+
+    <div class="flex flex-col gap-4 mb-8">
+      <mat-form-field appearance="outline">
+        <mat-label>Ρόλος</mat-label>
+        <mat-select [value]="u.roles[0]" [disabled]="isSelf" (selectionChange)="changeRole($event.value)">
+          @for (role of roles; track role) {
+            <mat-option [value]="role">{{ role }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-slide-toggle [checked]="u.isActive" [disabled]="isSelf" (change)="toggleActive()">
+        {{ u.isActive ? 'Ενεργός' : 'Ανενεργός' }}
+      </mat-slide-toggle>
+    </div>
+
+    <h2 class="text-lg font-semibold text-white mb-2">Ανάθεση συνδρομής</h2>
+    <form [formGroup]="planForm" (ngSubmit)="assignSubscription()" class="flex flex-col gap-4">
+      <mat-form-field appearance="outline">
+        <mat-label>Πακέτο</mat-label>
+        <mat-select formControlName="planId">
+          @for (p of plans(); track p.id) {
+            <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (assignError(); as message) {
+        <p class="text-sm text-red-400">{{ message }}</p>
+      }
+      @if (assignSuccess(); as message) {
+        <p class="text-sm text-green-400">{{ message }}</p>
+      }
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="assignSubmitting()">
+        Ανάθεση
+      </button>
+    </form>
+  } @else if (errorMessage(); as message) {
+    <p class="text-sm text-red-400">{{ message }}</p>
+  }
+</div>

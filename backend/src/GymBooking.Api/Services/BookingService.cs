@@ -92,7 +92,24 @@ public class BookingService
         });
     }
 
+    // Staff walk-in: ίδια atomic ροή με το self-service BookAsync· ο userId έρχεται από τον staff.
+    public async Task<(BookingOutcome Outcome, Booking? Booking)> BookForAsync(Guid userId, Guid classSessionId)
+    {
+        return await BookAsync(userId, classSessionId);
+    }
+
     public async Task<(BookingOutcome Outcome, Booking? Booking)> CancelAsync(Guid userId, Guid bookingId)
+    {
+        return await CancelCoreAsync(bookingId, ownerUserId: userId, enforceWindow: true);
+    }
+
+    // Staff: καμία ιδιοκτησία, καμία πολιτική παραθύρου.
+    public async Task<(BookingOutcome Outcome, Booking? Booking)> CancelByStaffAsync(Guid bookingId)
+    {
+        return await CancelCoreAsync(bookingId, ownerUserId: null, enforceWindow: false);
+    }
+
+    private async Task<(BookingOutcome Outcome, Booking? Booking)> CancelCoreAsync(Guid bookingId, Guid? ownerUserId, bool enforceWindow)
     {
         var strategy = _dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync<(BookingOutcome Outcome, Booking? Booking)>(async () =>
@@ -102,7 +119,11 @@ public class BookingService
             await using var tx = await _dbContext.Database.BeginTransactionAsync();
 
             var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId);
-            if (booking is null || booking.UserId != userId)
+            if (booking is null)
+            {
+                return (BookingOutcome.SessionNotFound, null);
+            }
+            if (ownerUserId is Guid oid && booking.UserId != oid)
             {
                 return (BookingOutcome.SessionNotFound, null); // ownership: μη-δική-σου → σαν να μην υπάρχει
             }
@@ -119,7 +140,7 @@ public class BookingService
                 .FirstOrDefaultAsync();
 
             // Φ6: πολιτική ακύρωσης — block αν είμαστε πολύ κοντά στην ώρα του μαθήματος.
-            if (session is not null)
+            if (enforceWindow && session is not null)
             {
                 var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
                 var cancellationHours = tenant?.CancellationHours ?? 0;
@@ -204,6 +225,42 @@ public class BookingService
 
             return (BookingOutcome.Success, booking);
         });
+    }
+
+    public async Task<RosterResponse?> GetRosterAsync(Guid classSessionId)
+    {
+        var session = await (
+            from s in _dbContext.ClassSessions
+            where s.Id == classSessionId
+            join ct in _dbContext.ClassTypes on s.ClassTypeId equals ct.Id
+            select new { s.Id, ClassTypeName = ct.Name, s.StartsAt, s.Capacity, s.BookedCount }).FirstOrDefaultAsync();
+        if (session is null)
+        {
+            return null;
+        }
+
+        var confirmed = await (
+            from b in _dbContext.Bookings
+            where b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed
+            join u in _dbContext.Users on b.UserId equals u.Id
+            orderby b.CreatedAt
+            select new RosterBooking(b.Id, u.Id, u.FirstName + " " + u.LastName, u.Email ?? string.Empty, b.CreatedAt))
+            .ToListAsync();
+
+        var waitingRaw = await (
+            from w in _dbContext.WaitlistEntries
+            where w.ClassSessionId == classSessionId && w.Status == WaitlistStatus.Waiting
+            join u in _dbContext.Users on w.UserId equals u.Id
+            orderby w.CreatedAt
+            select new { u.Id, Name = u.FirstName + " " + u.LastName }).ToListAsync();
+
+        var waitlist = waitingRaw
+            .Select((w, i) => new RosterWaiting(w.Id, w.Name, i + 1))
+            .ToList();
+
+        return new RosterResponse(
+            session.Id, session.ClassTypeName, session.StartsAt,
+            session.Capacity, session.BookedCount, confirmed, waitlist);
     }
 
     public async Task<List<BookingResponse>> GetMineAsync(Guid userId)

@@ -143,3 +143,50 @@ export interface Subscription {
   validFrom: string;
   validTo: string;
 }
+
+export interface AppUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ChangeRoleRequest {
+  role: 'User' | 'Instructor' | 'Admin';
+}
+
+export interface TenantSettings {
+  name: string;
+  cancellationHours: number;
+}
+
+export interface RosterBooking {
+  bookingId: string;
+  userId: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface RosterWaiting {
+  userId: string;
+  name: string;
+  position: number;
+}
+
+export interface Roster {
+  classSessionId: string;
+  classTypeName: string;
+  startsAt: string;
+  capacity: number;
+  bookedCount: number;
+  confirmed: RosterBooking[];
+  waitlist: RosterWaiting[];
+}
+
+export interface StaffBookRequest {
+  userId: string;
+}

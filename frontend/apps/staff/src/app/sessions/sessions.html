@@ -22,11 +22,14 @@
   } @else {
     <div class="flex flex-col gap-3">
       @for (s of pagination.paginatedItems(); track s.id) {
-        <div class="app-card text-sm text-white">
-          <div class="font-medium">{{ s.classTypeName }}</div>
-          <div class="text-[var(--app-text-secondary)]">
-            {{ s.startsAt | date: 'dd/MM HH:mm' }} — {{ s.instructorName }} — {{ s.bookedCount }}/{{ s.capacity }}
+        <div class="app-card text-sm text-white flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="font-medium">{{ s.classTypeName }}</div>
+            <div class="text-[var(--app-text-secondary)]">
+              {{ s.startsAt | date: 'dd/MM HH:mm' }} — {{ s.instructorName }} — {{ s.bookedCount }}/{{ s.capacity }}
+            </div>
           </div>
+          <a mat-button [routerLink]="['/sessions', s.id, 'roster']">Roster</a>
         </div>
       }
     </div>

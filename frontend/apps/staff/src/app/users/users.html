@@ -1,0 +1,39 @@
+<div class="app-content">
+  <lib-page-header title="Χρήστες" subtitle="Διαχείριση ρόλων & πρόσβασης" />
+
+  @if (errorMessage(); as message) {
+    <p class="text-sm text-red-400 mb-4">{{ message }}</p>
+  }
+
+  @if (users().length === 0) {
+    <div class="app-card app-empty-state">
+      <mat-icon class="!text-4xl !w-10 !h-10 mb-2 opacity-40">group</mat-icon>
+      <p>Δεν υπάρχουν χρήστες.</p>
+    </div>
+  } @else {
+    <div class="flex flex-col gap-3">
+      @for (u of pagination.paginatedItems(); track u.id) {
+        <div class="app-card text-sm text-white flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="font-medium truncate">{{ u.firstName }} {{ u.lastName }}</div>
+            <div class="text-[var(--app-text-secondary)] truncate">
+              {{ u.email }} · {{ u.roles.join(', ') }} · {{ u.isActive ? 'Ενεργός' : 'Ανενεργός' }}
+            </div>
+          </div>
+
+          <a mat-icon-button [routerLink]="['/users', u.id, 'edit']" aria-label="Επεξεργασία">
+            <mat-icon>edit</mat-icon>
+          </a>
+        </div>
+      }
+    </div>
+
+    <lib-list-paginator
+      class="mt-2 block"
+      [length]="users().length"
+      [pageIndex]="pagination.pageIndex()"
+      [pageSize]="pagination.pageSize()"
+      (pageChange)="pagination.onPage($event)"
+    />
+  }
+</div>

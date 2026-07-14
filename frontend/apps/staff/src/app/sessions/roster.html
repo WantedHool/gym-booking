@@ -1,0 +1,56 @@
+<div class="app-content">
+  @if (roster(); as r) {
+    <lib-page-header
+      [title]="r.classTypeName"
+      [subtitle]="(r.startsAt | date: 'dd/MM HH:mm') + ' · ' + r.bookedCount + '/' + r.capacity"
+    />
+
+    @if (errorMessage(); as message) {
+      <p class="text-sm text-red-400 mb-4">{{ message }}</p>
+    }
+
+    <h3 class="font-semibold text-white mt-4 mb-2">Κρατήσεις</h3>
+    @if (r.confirmed.length === 0) {
+      <p class="text-[var(--app-text-secondary)] text-sm">Καμία κράτηση.</p>
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (b of r.confirmed; track b.bookingId) {
+          <div class="app-card text-sm text-white flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="font-medium truncate">{{ b.name }}</div>
+              <div class="text-[var(--app-text-secondary)] truncate">{{ b.email }}</div>
+            </div>
+            <button mat-icon-button (click)="cancel(b.bookingId)" aria-label="Ακύρωση">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    <h3 class="font-semibold text-white mt-6 mb-2">Λίστα αναμονής</h3>
+    @if (r.waitlist.length === 0) {
+      <p class="text-[var(--app-text-secondary)] text-sm">Κενή.</p>
+    } @else {
+      <div class="flex flex-col gap-2">
+        @for (w of r.waitlist; track w.userId) {
+          <div class="app-card text-sm text-white">{{ w.position }}. {{ w.name }}</div>
+        }
+      </div>
+    }
+
+    <form [formGroup]="walkInForm" (ngSubmit)="walkIn()" class="flex items-end gap-3 mt-6">
+      <mat-form-field appearance="outline" class="flex-1">
+        <mat-label>Προσθήκη πελάτη (walk-in)</mat-label>
+        <mat-select formControlName="userId">
+          @for (c of customers(); track c.id) {
+            <mat-option [value]="c.id">{{ c.firstName }} {{ c.lastName }} ({{ c.email }})</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <button mat-flat-button color="primary" type="submit">Προσθήκη</button>
+    </form>
+  } @else if (errorMessage(); as message) {
+    <p class="text-sm text-red-400">{{ message }}</p>
+  }
+</div>

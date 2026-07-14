@@ -16,8 +16,10 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog: structured logging στην κονσόλα
-builder.Services.AddSerilog(config => config.WriteTo.Console());
+// Serilog: structured logging στην κονσόλα + αρχείο (ένα ανά μέρα, κρατάει τις τελευταίες 14 μέρες)
+builder.Services.AddSerilog(config => config
+    .WriteTo.Console()
+    .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -118,6 +120,9 @@ builder.Services.AddScoped<WaitlistService>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<MembershipPlanService>();
 builder.Services.AddScoped<SubscriptionService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<IRoleReaderWriter, IdentityRoleReaderWriter>();
+builder.Services.AddScoped<TenantSettingsService>();
 
 // Seed: 1 tenant + roles + 1 admin, μόνο σε άδεια βάση (βλ. κλήση seeder.SeedAsync() παρακάτω).
 var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()

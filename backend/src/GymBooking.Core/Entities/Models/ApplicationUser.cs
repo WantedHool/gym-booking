@@ -10,4 +10,5 @@ public class ApplicationUser : IdentityUser<Guid>
     public string LastName { get; set; } = string.Empty;
     public UserStatus Status { get; set; } = UserStatus.Active;
     public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

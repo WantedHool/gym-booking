@@ -1,5 +1,6 @@
 using GymBooking.Api.Services;
 using GymBooking.Core.Contracts;
+using GymBooking.Core.Entities.Constants;
 using GymBooking.Core.Entities.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -52,6 +53,44 @@ public class BookingsController : ControllerBase
         {
             BookingOutcome.SessionNotFound => NotFound(),
             BookingOutcome.CancellationTooLate => Conflict("Δεν μπορείς να ακυρώσεις τόσο κοντά στην ώρα του μαθήματος."),
+            _ => NoContent(),
+        };
+    }
+
+    [HttpGet("/sessions/{sessionId:guid}/roster")]
+    [Authorize(Policy = Policies.RequireInstructor)]
+    public async Task<ActionResult<RosterResponse>> GetRoster(Guid sessionId)
+    {
+        var roster = await _service.GetRosterAsync(sessionId);
+        return roster is null ? NotFound() : Ok(roster);
+    }
+
+    [HttpPost("/sessions/{sessionId:guid}/bookings")]
+    [Authorize(Policy = Policies.RequireInstructor)]
+    public async Task<IActionResult> StaffBook(Guid sessionId, [FromBody] StaffBookRequest request)
+    {
+        var (outcome, _) = await _service.BookForAsync(request.UserId, sessionId);
+        return outcome switch
+        {
+            BookingOutcome.Success => NoContent(),
+            BookingOutcome.SessionNotFound => NotFound(),
+            BookingOutcome.SessionCancelled => Conflict("Το session έχει ακυρωθεί."),
+            BookingOutcome.SessionFull => Conflict("Το session είναι πλήρες."),
+            BookingOutcome.AlreadyBooked => Conflict("Ο πελάτης έχει ήδη κράτηση."),
+            BookingOutcome.TimeConflict => Conflict("Ο πελάτης έχει επικαλυπτόμενη κράτηση."),
+            BookingOutcome.NoSubscription => Conflict("Ο πελάτης δεν έχει ενεργή συνδρομή."),
+            _ => BadRequest(),
+        };
+    }
+
+    [HttpDelete("/bookings/{id:guid}/staff")]
+    [Authorize(Policy = Policies.RequireInstructor)]
+    public async Task<IActionResult> StaffCancel(Guid id)
+    {
+        var (outcome, _) = await _service.CancelByStaffAsync(id);
+        return outcome switch
+        {
+            BookingOutcome.SessionNotFound => NotFound(),
             _ => NoContent(),
         };
     }

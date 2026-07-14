@@ -51,6 +51,11 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
+        if (!user.IsActive)
+        {
+            return Unauthorized();
+        }
+
         // Μόλις βρεθεί ο χρήστης, ξέρουμε το tenant του — από εδώ και πέρα στο ίδιο request
         // (π.χ. UserManager.GetRolesAsync) το query filter δουλεύει σωστά.
         _currentTenant.SetTenant(user.TenantId);
@@ -103,6 +108,7 @@ public class AuthController : ControllerBase
             FirstName = request.FirstName,
             LastName = request.LastName,
             EmailConfirmed = true,
+            CreatedAt = DateTime.UtcNow,
         };
 
         var result = await _userManager.CreateAsync(user, request.Password);

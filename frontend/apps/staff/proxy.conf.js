@@ -10,5 +10,8 @@ module.exports = {
   '/instructors': apiRoute(),
   '/membership-plans': apiRoute(),
   '/subscriptions': apiRoute(),
+  '/users': apiRoute(true),
+  '/tenant': apiRoute(true),
+  '/sessions': apiRoute(true),
   '/health': apiRoute(),
 };

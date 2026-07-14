@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -36,6 +36,17 @@ export class StaffShell {
   );
 
   protected readonly isAdmin = computed(() => this.authService.hasRole('Admin'));
+
+  // Ανοιχτό by default (και σε desktop και σε mobile)· κλείνει αυτόματα όταν περνάμε σε στενή
+  // οθόνη, ο χρήστης μπορεί να το toggle-άρει χειροκίνητα ανά πάσα στιγμή (και στα δύο).
+  protected readonly sidenavOpen = signal(true);
+  private readonly resetSidenavOnBreakpointChange = effect(() => {
+    this.sidenavOpen.set(!this.isNarrow());
+  });
+
+  toggleSidenav(): void {
+    this.sidenavOpen.update((open) => !open);
+  }
 
   logout(): void {
     this.authService.logout();
