@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<MembershipPlan> MembershipPlans => Set<MembershipPlan>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,10 +38,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
         modelBuilder.Entity<Booking>().HasQueryFilter(b => b.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<MembershipPlan>().HasQueryFilter(p => p.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
+        modelBuilder.Entity<WaitlistEntry>().HasQueryFilter(w => w.TenantId == _currentTenant.TenantId);
 
         // DB-level δικλείδα ασφαλείας ενάντια σε διπλή confirmed κράτηση (πέρα από τον έλεγχο στο service).
         modelBuilder.Entity<Booking>()
             .HasIndex(b => new { b.UserId, b.ClassSessionId })
+            .IsUnique()
+            .HasFilter("\"Status\" = 0");
+
+        // Ένας χρήστης δεν μπορεί να είναι δύο φορές σε Waiting για το ίδιο session.
+        modelBuilder.Entity<WaitlistEntry>()
+            .HasIndex(w => new { w.UserId, w.ClassSessionId })
             .IsUnique()
             .HasFilter("\"Status\" = 0");
     }

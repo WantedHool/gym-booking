@@ -56,17 +56,7 @@ public class BookingService
                 return (BookingOutcome.AlreadyBooked, null);
             }
 
-            // Overlap: φέρνουμε τα confirmed sessions του χρήστη στη μνήμη (λίγα) — το AddMinutes γίνεται σε C#.
-            var newStart = session.StartsAt;
-            var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
-            var userSessions = await (
-                from b in _dbContext.Bookings
-                where b.UserId == userId && b.Status == BookingStatus.Confirmed
-                join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
-                select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
-
-            var overlaps = userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
-            if (overlaps)
+            if (await HasTimeConflictAsync(userId, session))
             {
                 return (BookingOutcome.TimeConflict, null);
             }
@@ -76,27 +66,11 @@ public class BookingService
                 return (BookingOutcome.SessionFull, null);
             }
 
-            // --- Φ5: consumption συνδρομής (κλείδωμα της γραμμής subscription μέσα στο ίδιο tx) ---
-            var subscription = await _dbContext.Subscriptions
-                .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""UserId"" = {userId} AND ""TenantId"" = {tenantId} AND ""Status"" = 0 ORDER BY ""ValidFrom"" DESC LIMIT 1 FOR UPDATE")
-                .IgnoreQueryFilters()
-                .AsTracking()
-                .FirstOrDefaultAsync();
-
-            var now = DateTime.UtcNow;
-            var usable = subscription is not null
-                && subscription.ValidFrom <= now && now <= subscription.ValidTo
-                && (subscription.RemainingSessions == null || subscription.RemainingSessions > 0);
+            var (usable, subscriptionId) = await TryConsumeSubscriptionAsync(userId, tenantId);
             if (!usable)
             {
                 return (BookingOutcome.NoSubscription, null);
             }
-
-            if (subscription!.RemainingSessions != null)
-            {
-                subscription.RemainingSessions -= 1; // SessionPack
-            }
-            // --- τέλος consumption ---
 
             var booking = new Booking
             {
@@ -105,11 +79,11 @@ public class BookingService
                 UserId = userId,
                 ClassSessionId = classSessionId,
                 Status = BookingStatus.Confirmed,
-                CreatedAt = now,
-                SubscriptionId = subscription.Id, // Φ5: για ακριβές refund
+                CreatedAt = DateTime.UtcNow,
+                SubscriptionId = subscriptionId,
             };
             _dbContext.Bookings.Add(booking);
-            session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount
+            session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount (book)
 
             await _dbContext.SaveChangesAsync();
             await tx.CommitAsync();
@@ -144,6 +118,17 @@ public class BookingService
                 .AsTracking()
                 .FirstOrDefaultAsync();
 
+            // Φ6: πολιτική ακύρωσης — block αν είμαστε πολύ κοντά στην ώρα του μαθήματος.
+            if (session is not null)
+            {
+                var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
+                var cancellationHours = tenant?.CancellationHours ?? 0;
+                if (cancellationHours > 0 && DateTime.UtcNow > session.StartsAt.AddHours(-cancellationHours))
+                {
+                    return (BookingOutcome.CancellationTooLate, booking);
+                }
+            }
+
             booking.Status = BookingStatus.Cancelled;
             booking.CancelledAt = DateTime.UtcNow;
 
@@ -165,6 +150,54 @@ public class BookingService
                     subscription.RemainingSessions += 1;
                 }
             }
+
+            // --- Φ6: auto-promote επόμενου έγκυρου της λίστας αναμονής (μέσα στο ίδιο tx) ---
+            if (session is not null && session.BookedCount < session.Capacity)
+            {
+                var waiting = await _dbContext.WaitlistEntries
+                    .Where(w => w.ClassSessionId == booking.ClassSessionId && w.Status == WaitlistStatus.Waiting)
+                    .OrderBy(w => w.CreatedAt)
+                    .ToListAsync();
+
+                foreach (var entry in waiting)
+                {
+                    var entryAlreadyBooked = await _dbContext.Bookings
+                        .AnyAsync(b => b.UserId == entry.UserId && b.ClassSessionId == booking.ClassSessionId && b.Status == BookingStatus.Confirmed);
+                    if (entryAlreadyBooked)
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    if (await HasTimeConflictAsync(entry.UserId, session))
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    var (entryUsable, entrySubscriptionId) = await TryConsumeSubscriptionAsync(entry.UserId, tenantId);
+                    if (!entryUsable)
+                    {
+                        entry.Status = WaitlistStatus.Left;
+                        continue;
+                    }
+
+                    _dbContext.Bookings.Add(new Booking
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        UserId = entry.UserId,
+                        ClassSessionId = booking.ClassSessionId,
+                        Status = BookingStatus.Confirmed,
+                        CreatedAt = DateTime.UtcNow,
+                        SubscriptionId = entrySubscriptionId,
+                    });
+                    session.BookedCount += 1; // επιστροφή θέσης → προωθημένος
+                    entry.Status = WaitlistStatus.Promoted;
+                    break;
+                }
+            }
+            // --- τέλος auto-promote ---
 
             await _dbContext.SaveChangesAsync();
             await tx.CommitAsync();
@@ -189,5 +222,45 @@ public class BookingService
                 b.Status.ToString(),
                 b.CreatedAt))
             .ToListAsync();
+    }
+
+    // Χρονική επικάλυψη με άλλη confirmed κράτηση του χρήστη (τα confirmed sessions είναι λίγα → in-memory).
+    private async Task<bool> HasTimeConflictAsync(Guid userId, ClassSession session)
+    {
+        var newStart = session.StartsAt;
+        var newEnd = session.StartsAt.AddMinutes(session.DurationMinutes);
+        var userSessions = await (
+            from b in _dbContext.Bookings
+            where b.UserId == userId && b.Status == BookingStatus.Confirmed
+            join s in _dbContext.ClassSessions on b.ClassSessionId equals s.Id
+            select new { s.StartsAt, s.DurationMinutes }).ToListAsync();
+
+        return userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
+    }
+
+    // Κλειδώνει (FOR UPDATE) & καταναλώνει τη μοναδική active συνδρομή· επιστρέφει αν είναι χρήσιμη + το Id της.
+    private async Task<(bool Usable, Guid? SubscriptionId)> TryConsumeSubscriptionAsync(Guid userId, Guid tenantId)
+    {
+        var subscription = await _dbContext.Subscriptions
+            .FromSqlInterpolated($@"SELECT * FROM ""Subscriptions"" WHERE ""UserId"" = {userId} AND ""TenantId"" = {tenantId} AND ""Status"" = 0 ORDER BY ""ValidFrom"" DESC LIMIT 1 FOR UPDATE")
+            .IgnoreQueryFilters()
+            .AsTracking()
+            .FirstOrDefaultAsync();
+
+        var now = DateTime.UtcNow;
+        var usable = subscription is not null
+            && subscription.ValidFrom <= now && now <= subscription.ValidTo
+            && (subscription.RemainingSessions == null || subscription.RemainingSessions > 0);
+        if (!usable)
+        {
+            return (false, null);
+        }
+
+        if (subscription!.RemainingSessions != null)
+        {
+            subscription.RemainingSessions -= 1;
+        }
+
+        return (true, subscription.Id);
     }
 }

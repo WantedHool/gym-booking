@@ -8,3 +8,4 @@ export * from './lib/schedule-api.service';
 export * from './lib/instructor-api.service';
 export * from './lib/membership-plan-api.service';
 export * from './lib/subscription-api.service';
+export * from './lib/waitlist-api.service';

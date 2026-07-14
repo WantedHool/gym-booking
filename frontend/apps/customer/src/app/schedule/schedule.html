@@ -46,8 +46,11 @@
         <lib-session-card
           [session]="s"
           [dateFormat]="dateFormats.session"
+          [waitlistPosition]="waitlistPosition(s)"
           (bookSession)="book($event)"
           (cancelSession)="cancel($event)"
+          (joinWaitlist)="joinWaitlist($event)"
+          (leaveWaitlist)="leaveWaitlist($event)"
         />
       } @empty {
         <lib-empty-state icon="event_busy" message="Δεν υπάρχουν μαθήματα αυτή την εβδομάδα." />

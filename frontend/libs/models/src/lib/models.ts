@@ -90,6 +90,13 @@ export interface ScheduleSession {
   myBookingId: string | null;
 }
 
+export interface WaitlistEntry {
+  classSessionId: string;
+  classTypeName: string;
+  startsAt: string; // ISO UTC
+  position: number;
+}
+
 export interface Instructor {
   id: string;
   name: string;

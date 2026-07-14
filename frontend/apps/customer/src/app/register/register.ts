@@ -2,14 +2,16 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthApiService } from '@frontend/data-access';
+import { AuthBrand } from '@frontend/ui';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, AuthBrand],
   templateUrl: './register.html',
 })
 export class Register {
@@ -34,6 +36,7 @@ export class Register {
   });
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly submitting = signal(false);
+  protected readonly hidePassword = signal(true);
 
   submit(): void {
     if (this.form.invalid) {

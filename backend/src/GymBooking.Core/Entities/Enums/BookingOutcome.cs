@@ -9,4 +9,5 @@ public enum BookingOutcome
     AlreadyBooked,
     TimeConflict,
     NoSubscription,
+    CancellationTooLate,
 }

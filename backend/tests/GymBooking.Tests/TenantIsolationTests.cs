@@ -193,6 +193,35 @@ public class TenantIsolationTests
         Assert.Equal(tenantA, results[0].TenantId);
     }
 
+    [Fact]
+    public void Waitlist_query_returns_only_current_tenant_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var dbName = Guid.NewGuid().ToString();
+
+        using (var seedContext = CreateContext(dbName, new FakeCurrentTenant(tenantA)))
+        {
+            seedContext.WaitlistEntries.Add(new WaitlistEntry
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA, UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.WaitlistEntries.Add(new WaitlistEntry
+            {
+                Id = Guid.NewGuid(), TenantId = tenantB, UserId = Guid.NewGuid(),
+                ClassSessionId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow,
+            });
+            seedContext.SaveChanges();
+        }
+
+        using var context = CreateContext(dbName, new FakeCurrentTenant(tenantA));
+        var rows = context.WaitlistEntries.ToList();
+
+        Assert.Single(rows);
+        Assert.Equal(tenantA, rows[0].TenantId);
+    }
+
     private class FakeCurrentTenant : ICurrentTenant
     {
         public FakeCurrentTenant(Guid tenantId)

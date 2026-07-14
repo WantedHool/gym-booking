@@ -1,4 +1,5 @@
 export * from './lib/accent-badge/accent-badge';
+export * from './lib/auth-brand/auth-brand';
 export * from './lib/booking-card/booking-card';
 export * from './lib/date-formats';
 export * from './lib/empty-state/empty-state';

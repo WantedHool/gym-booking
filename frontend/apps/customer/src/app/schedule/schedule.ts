@@ -11,6 +11,7 @@ import {
   ClassTypeApiService,
   InstructorApiService,
   ScheduleApiService,
+  WaitlistApiService,
 } from '@frontend/data-access';
 import { ClassType, Instructor, ScheduleSession } from '@frontend/models';
 import {
@@ -47,6 +48,7 @@ export class Schedule {
   private readonly bookingsStore = inject(BookingsStore);
   private readonly classTypeApi = inject(ClassTypeApiService);
   private readonly instructorApi = inject(InstructorApiService);
+  private readonly waitlistApi = inject(WaitlistApiService);
 
   protected readonly weekStart = signal(this.mondayOf(new Date()));
   protected readonly sessions = signal<ScheduleSession[]>([]);
@@ -56,6 +58,7 @@ export class Schedule {
   protected readonly instructorId = signal<string>('');
   protected readonly message = signal<string | null>(null);
   protected readonly loading = signal(false);
+  protected readonly waitlistPositions = signal<Record<string, number>>({});
 
   protected readonly weekEnd = computed(() => {
     const d = new Date(this.weekStart());
@@ -67,6 +70,7 @@ export class Schedule {
     this.classTypeApi.getAll().subscribe((x) => this.classTypes.set(x));
     this.instructorApi.getAll().subscribe((x) => this.instructors.set(x));
     this.load();
+    this.loadWaitlist();
   }
 
   private mondayOf(date: Date): Date {
@@ -98,6 +102,16 @@ export class Schedule {
       });
   }
 
+  protected loadWaitlist(): void {
+    this.waitlistApi.getMine().subscribe((entries) => {
+      const map: Record<string, number> = {};
+      for (const e of entries) {
+        map[e.classSessionId] = e.position;
+      }
+      this.waitlistPositions.set(map);
+    });
+  }
+
   changeWeek(deltaDays: number): void {
     const d = new Date(this.weekStart());
     d.setDate(d.getDate() + deltaDays);
@@ -126,5 +140,21 @@ export class Schedule {
         this.bookingsStore.load();
       },
     });
+  }
+
+  joinWaitlist(session: ScheduleSession): void {
+    this.message.set(null);
+    this.waitlistApi.join(session.id).subscribe({
+      next: () => this.loadWaitlist(),
+      error: (err) => this.message.set(err?.error ?? 'Η εγγραφή στη λίστα αναμονής απέτυχε.'),
+    });
+  }
+
+  leaveWaitlist(session: ScheduleSession): void {
+    this.waitlistApi.leave(session.id).subscribe({ next: () => this.loadWaitlist() });
+  }
+
+  waitlistPosition(session: ScheduleSession): number | null {
+    return this.waitlistPositions()[session.id] ?? null;
   }
 }

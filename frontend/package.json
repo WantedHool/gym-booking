@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "start:customer": "nx serve customer",
-    "start:staff": "nx serve staff --port 4201",
+    "start:customer": "nx serve customer --open",
+    "start:staff": "nx serve staff --port 4201 --open",
     "lint": "nx run-many -t lint",
     "build": "nx run-many -t build"
   },

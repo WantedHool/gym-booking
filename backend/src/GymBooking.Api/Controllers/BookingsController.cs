@@ -48,6 +48,11 @@ public class BookingsController : ControllerBase
     {
         var userId = Guid.Parse(User.FindFirst("sub")!.Value);
         var (outcome, _) = await _service.CancelAsync(userId, id);
-        return outcome == BookingOutcome.SessionNotFound ? NotFound() : NoContent();
+        return outcome switch
+        {
+            BookingOutcome.SessionNotFound => NotFound(),
+            BookingOutcome.CancellationTooLate => Conflict("Δεν μπορείς να ακυρώσεις τόσο κοντά στην ώρα του μαθήματος."),
+            _ => NoContent(),
+        };
     }
 }

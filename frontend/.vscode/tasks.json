@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "serve: customer",
+      "type": "npm",
+      "script": "start:customer",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "nx",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Local:|localhost|Compiled successfully|Application bundle generation complete"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "apps"
+      }
+    },
+    {
+      "label": "serve: staff",
+      "type": "npm",
+      "script": "start:staff",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "nx",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Local:|localhost|Compiled successfully|Application bundle generation complete"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "apps"
+      }
+    },
+    {
+      "label": "Serve Both Apps",
+      "dependsOn": ["serve: customer", "serve: staff"],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

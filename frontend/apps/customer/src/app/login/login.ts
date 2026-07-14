@@ -2,15 +2,16 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Router } from '@angular/router';
 import { AuthService } from '@frontend/auth';
-import { AccentBadge } from '@frontend/ui';
+import { AccentBadge, AuthBrand } from '@frontend/ui';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, AccentBadge],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, AccentBadge, AuthBrand],
   templateUrl: './login.html',
 })
 export class Login {
@@ -24,6 +25,7 @@ export class Login {
   });
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly submitting = signal(false);
+  protected readonly hidePassword = signal(true);
 
   submit(): void {
     if (this.form.invalid) {

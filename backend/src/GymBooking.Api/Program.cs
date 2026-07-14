@@ -114,6 +114,7 @@ builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<ClassTypeService>();
 builder.Services.AddScoped<ClassSessionService>();
 builder.Services.AddScoped<BookingService>();
+builder.Services.AddScoped<WaitlistService>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<MembershipPlanService>();
 builder.Services.AddScoped<SubscriptionService>();

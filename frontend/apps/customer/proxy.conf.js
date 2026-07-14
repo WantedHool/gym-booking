@@ -9,5 +9,7 @@ module.exports = {
   '/schedule': apiRoute(true),
   '/instructors': apiRoute(),
   '/subscriptions': apiRoute(),
+  '/waitlist': apiRoute(),
+  '/sessions': apiRoute(),
   '/health': apiRoute(),
 };

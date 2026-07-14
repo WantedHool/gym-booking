@@ -8,6 +8,8 @@
 
   <div class="flex flex-1 items-center justify-center p-4 lg:p-12 bg-[var(--app-bg-page)]">
     <form [formGroup]="form" (ngSubmit)="submit()" class="w-full max-w-sm flex flex-col gap-4">
+      <lib-auth-brand emoji="⚙️" />
+
       <div class="text-center flex flex-col items-center gap-2">
         <h2 class="text-xl font-medium text-white">Σύνδεση</h2>
         <span class="app-badge app-badge--md">Πύλη Προσωπικού</span>
@@ -20,7 +22,16 @@
 
       <mat-form-field appearance="outline" class="w-full">
         <mat-label>Κωδικός</mat-label>
-        <input matInput type="password" formControlName="password" autocomplete="current-password" />
+        <input matInput [type]="hidePassword() ? 'password' : 'text'" formControlName="password" autocomplete="current-password" />
+        <button
+          mat-icon-button
+          matSuffix
+          type="button"
+          (click)="hidePassword.set(!hidePassword())"
+          [attr.aria-label]="hidePassword() ? 'Εμφάνιση κωδικού' : 'Απόκρυψη κωδικού'"
+        >
+          <mat-icon>{{ hidePassword() ? 'visibility' : 'visibility_off' }}</mat-icon>
+        </button>
       </mat-form-field>
 
       @if (errorMessage(); as message) {

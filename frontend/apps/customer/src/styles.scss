@@ -145,6 +145,41 @@ a.app-nav-active .mat-icon {
   background: #f87171;
 }
 
+.app-auth-brand-badge {
+  animation: app-auth-brand-in 0.5s ease-out both, app-auth-brand-pulse 2.6s ease-in-out 0.5s infinite;
+}
+
+.app-auth-brand-word {
+  animation: app-auth-brand-in 0.5s ease-out 0.1s both;
+}
+
+@keyframes app-auth-brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-auth-brand-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-accent) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--app-accent) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-auth-brand-badge,
+  .app-auth-brand-word {
+    animation: none;
+  }
+}
+
 .app-paginator {
   background: transparent;
   color: var(--app-text-secondary);

@@ -13,9 +13,12 @@ import { CUSTOMER_DATE_FORMATS } from '../date-formats';
 export class SessionCard {
   readonly session = input.required<ScheduleSession>();
   readonly dateFormat = input(CUSTOMER_DATE_FORMATS.session);
+  readonly waitlistPosition = input<number | null>(null);
 
   readonly bookSession = output<ScheduleSession>();
   readonly cancelSession = output<ScheduleSession>();
+  readonly joinWaitlist = output<ScheduleSession>();
+  readonly leaveWaitlist = output<ScheduleSession>();
 
   protected isFull(): boolean {
     const s = this.session();
