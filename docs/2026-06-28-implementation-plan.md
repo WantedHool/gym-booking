@@ -5400,10 +5400,12 @@ Expected: όλα PASS.
 
 > Κάθε φάση = δικό της σετ bite-sized TDD tasks, που θα γραφτούν όταν ξεκινά (τότε τα paths/DTOs υπάρχουν). Εδώ μόνο το περίγραμμα + τα tricky σημεία.
 
-### Phase 7 — Admin/staff dashboard + responsive QA (~12h)
-- [ ] `staff` app admin: διαχείριση χρηστών/ρόλων, εποπτεία κρατήσεων, tenant settings.
-- [ ] Responsive QA customer (mobile) + staff (desktop).
-- [ ] (SHOULD: SignalR live availability — hub `SpotsUpdated` + Signals στο customer· emit από το single point του booking service.)
+### Phase 7 — Admin/staff dashboard + responsive QA (~12h) — ✅ ολοκληρώθηκε 14 Ιουλίου
+- [x] `staff` app admin: διαχείριση χρηστών/ρόλων, εποπτεία κρατήσεων, tenant settings.
+- [x] Responsive QA customer (mobile) + staff (desktop/tablet).
+- [ ] (SHOULD: SignalR live availability — hub `SpotsUpdated` + Signals στο customer· emit από το single point του booking service.) — δεν υλοποιήθηκε, αναβάλλεται.
+
+> Αναλυτικό πλάνο: [2026-07-14-phase7-admin-dashboard-plan.md](2026-07-14-phase7-admin-dashboard-plan.md) (18 tasks, GROUPS A–E). Εύρημα εκτός scope: προϋπάρχον bug στο staff sidenav drawer σε στενές οθόνες — καταγράφηκε ως ξεχωριστό task, να συμπεριληφθεί στη Φάση 8.
 
 ### Phase 8 — Hardening + security + deployment (~12h)
 - [ ] Security pass: OWASP checklist, resource-ownership checks παντού, .NET analyzers, (SHOULD: rate limiting/lockout, refresh token rotation, httpOnly cookie).

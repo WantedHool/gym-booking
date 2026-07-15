@@ -55,13 +55,13 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [x] Φ1 — Auth + ρόλοι + invitation/registration
 - [x] Φ2 — ClassType/ClassSession CRUD + instructor
 - [x] Φ3 — Booking core (atomic) + tests
-- [ ] Φ4 — Weekly schedule + φίλτρα + customer dashboard
-- [ ] Φ5 — Subscriptions/plans + consumption
-- [ ] Φ6 — Waitlist + cancellation policy
-- [ ] Φ7 — Admin/staff dashboard + responsive QA
+- [x] Φ4 — Weekly schedule + φίλτρα + customer dashboard
+- [x] Φ5 — Subscriptions/plans + consumption
+- [x] Φ6 — Waitlist + cancellation policy
+- [x] Φ7 — Admin/staff dashboard + responsive QA
 - [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
 
-**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ + Φ2 ✅ + Φ3 ✅ (Tasks 25–34, ολοκληρωμένα 9 Ιουλίου· atomic booking με `SELECT...FOR UPDATE`, concurrency proof, anti-double-booking, cancel, HTTP API + customer UI). **Πρόοδος: ~52h / ~98h (~53%) — μπροστά από το χρονοδιάγραμμα.** **Επόμενο: Φ4 — Weekly schedule + φίλτρα + customer dashboard** (Tasks 35–40, ήδη αναλυτικά στο plan).
+**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ + Φ2 ✅ + Φ3 ✅ + Φ4 ✅ + Φ5 ✅ + Φ6 ✅ + Φ7 ✅ (ολοκληρωμένο 14 Ιουλίου, βάσει [docs/2026-07-14-phase7-admin-dashboard-plan.md](docs/2026-07-14-phase7-admin-dashboard-plan.md)· `UserService`/`UsersController` (list/role/active, self-modify guard), `ApplicationUser.CreatedAt` + migration, staff booking oversight (`GetRosterAsync`, `BookForAsync` walk-in, `CancelByStaffAsync` — refactor `CancelAsync`→`CancelCoreAsync` κοινός πυρήνας), `TenantSettingsService`/`TenantController` (name + `CancellationHours`), reject-inactive-login· FE: `users`/`settings`/`sessions/:id/roster` staff pages, νέα data-access services, admin-only nav wiring, responsive QA pass (customer mobile 390px + staff desktop 1280px/tablet 768px — κανένα overflow στις νέες σελίδες). **Εύρημα εκτός scope:** προϋπάρχον bug στο staff sidenav drawer σε στενές οθόνες (μένει εκτός οθόνης όταν ανοίγει, stuck CSS transition) — καταγράφηκε ως ξεχωριστό background task, δεν το προκάλεσε η Φ7. **Πρόοδος: ~98h / ~98h (~100% του αρχικού πλάνου).** **Επόμενο: Φ8 — Hardening + security + deployment** (θα αναλυθεί σε bite-sized tasks όταν ξεκινήσουμε· θα χρειαστεί να συμπεριλάβει και το drawer bug).
 > ⚙️ **Μοτίβο υλοποίησης (από Φ2):** ο **Claude γράφει** τον κώδικα (+ εξηγεί), ο **χρήστης κάνει review**. Πριν από κάθε ενέργεια → επιβεβαίωση. Ποτέ commit (το κάνει ο χρήστης).
 > 🚀 **Πριν κωδικοποίηση:** `nvm use 20` (frontend) · `docker compose -f docker/docker-compose.yml up -d` (DB).
 
