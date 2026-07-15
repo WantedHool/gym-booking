@@ -36,7 +36,7 @@ public class InvitationService
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
     }
 
-    public async Task CreateAsync(string email, string role)
+    public async Task<string> CreateAsync(string email, string role)
     {
         var rawToken = GenerateRawToken();
         var invitation = new Invitation
@@ -63,6 +63,8 @@ public class InvitationService
             email,
             "Πρόσκληση εγγραφής",
             $"Προσκλήθηκες να εγγραφείς ως {roleLabel} στο Demo Gym. Κάνε εγγραφή εδώ: {registerLink}");
+
+        return registerLink;
     }
 
     public async Task<Invitation?> ValidateTokenAsync(string rawToken)

@@ -8,6 +8,7 @@ using GymBooking.Core.Multitenancy;
 using GymBooking.Core.Options;
 using GymBooking.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -107,7 +108,16 @@ builder.Services.AddAuthorization(options =>
 var emailOptions = builder.Configuration.GetSection("Email").Get<EmailOptions>()
     ?? throw new InvalidOperationException("Missing 'Email' configuration section.");
 builder.Services.AddSingleton(emailOptions);
-builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
+// Dev → SmtpEmailSender (Papercut). Αλλού (Production/demo) → LoggingEmailSender (δεν υπάρχει SMTP).
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailSender, LoggingEmailSender>();
+}
 
 var invitationOptions = builder.Configuration.GetSection("Invitations").Get<InvitationOptions>()
     ?? throw new InvalidOperationException("Missing 'Invitations' configuration section.");
@@ -129,6 +139,7 @@ var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()
     ?? throw new InvalidOperationException("Missing 'Seed' configuration section.");
 builder.Services.AddSingleton(seedOptions);
 builder.Services.AddScoped<DbSeeder>();
+builder.Services.AddScoped<DemoDataSeeder>();
 
 // Health checks: ελέγχει και τη σύνδεση με τη βάση μέσω του AppDbContext
 builder.Services.AddHealthChecks()
@@ -136,11 +147,26 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Seed: τρέχει μόνο σε άδεια βάση (βλ. DbSeeder.SeedAsync).
-using (var seedScope = app.Services.CreateScope())
+// Εφάρμοσε τυχόν pending migrations (deployed container: δεν τρέχει χειροκίνητα το `dotnet ef`)
+// και μετά κάνε seed. Στο Testing (InMemory) δεν υπάρχουν migrations — παρακάμπτεται.
+using (var startupScope = app.Services.CreateScope())
 {
-    var seeder = seedScope.ServiceProvider.GetRequiredService<DbSeeder>();
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        var dbContext = startupScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await dbContext.Database.MigrateAsync();
+    }
+
+    var seeder = startupScope.ServiceProvider.GetRequiredService<DbSeeder>();
     await seeder.SeedAsync();
+
+    var demoSeeder = startupScope.ServiceProvider.GetRequiredService<DemoDataSeeder>();
+    await demoSeeder.SeedAsync();
+
+    foreach (var additionalTenant in seedOptions.AdditionalTenants)
+    {
+        await seeder.SeedAdditionalTenantAsync(additionalTenant);
+    }
 }
 
 // Serilog request logging (ένα δομημένο log ανά HTTP request)
@@ -153,7 +179,18 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference(); // διαδραστικό API docs UI στο /scalar/v1
 }
 
-app.UseHttpsRedirection();
+// Πίσω από τον reverse proxy του Render το TLS τερματίζεται στον edge· ο container δέχεται HTTP.
+// Τα forwarded headers δίνουν στο app το σωστό scheme/host. Το HTTPS redirect μένει μόνο σε dev
+// (σε production θα προκαλούσε redirect loop — το HTTPS το εγγυάται ήδη ο Render edge).
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+});
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 if (app.Environment.IsDevelopment())
 {

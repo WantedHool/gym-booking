@@ -76,6 +76,10 @@ export interface CreateInvitationRequest {
   role: 'User' | 'Instructor';
 }
 
+export interface InvitationResponse {
+  registerLink: string;
+}
+
 export interface ScheduleSession {
   id: string;
   classTypeId: string;

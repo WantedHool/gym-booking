@@ -89,4 +89,70 @@ public class DbSeeder
                 "Seeding admin role assignment failed: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)));
         }
     }
+
+    // On-demand: δημιουργεί επιπλέον tenant + admin (για προσωπικά tests). Idempotent σε slug.
+    // Ο admin δημιουργείται μέσω UserManager (έγκυρο Identity hash), όπως ο πρώτος.
+    public async Task SeedAdditionalTenantAsync(AdditionalTenantSeed seed)
+    {
+        if (string.IsNullOrWhiteSpace(seed.TenantSlug))
+        {
+            return;
+        }
+
+        var exists = await _dbContext.Tenants.IgnoreQueryFilters()
+            .AnyAsync(t => t.Slug == seed.TenantSlug);
+        if (exists)
+        {
+            return;
+        }
+
+        var tenant = new Tenant
+        {
+            Id = Guid.NewGuid(),
+            Name = seed.TenantName,
+            Slug = seed.TenantSlug,
+            CancellationHours = seed.CancellationHours,
+            IsActive = true,
+        };
+        _dbContext.Tenants.Add(tenant);
+        await _dbContext.SaveChangesAsync();
+
+        foreach (var role in new[] { Roles.User, Roles.Instructor, Roles.Admin })
+        {
+            if (!await _roleManager.RoleExistsAsync(role))
+            {
+                await _roleManager.CreateAsync(new ApplicationRole { Name = role });
+            }
+        }
+
+        var admin = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            UserName = seed.AdminEmail,
+            Email = seed.AdminEmail,
+            FirstName = "Admin",
+            LastName = tenant.Name,
+            EmailConfirmed = true,
+        };
+
+        var result = await _userManager.CreateAsync(admin, seed.AdminPassword);
+        if (!result.Succeeded)
+        {
+            _dbContext.Tenants.Remove(tenant);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                "Seeding additional tenant admin failed: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
+
+        var roleResult = await _userManager.AddToRoleAsync(admin, Roles.Admin);
+        if (!roleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(admin);
+            _dbContext.Tenants.Remove(tenant);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                "Seeding additional tenant admin role failed: " + string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+        }
+    }
 }

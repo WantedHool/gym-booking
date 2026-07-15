@@ -19,15 +19,15 @@ public class InvitationsController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = Policies.RequireAdmin)]
-    public async Task<IActionResult> Create([FromBody] CreateInvitationRequest request)
+    public async Task<ActionResult<InvitationResponse>> Create([FromBody] CreateInvitationRequest request)
     {
         if (request.Role != Roles.User && request.Role != Roles.Instructor)
         {
             return BadRequest($"Role must be '{Roles.User}' or '{Roles.Instructor}'.");
         }
 
-        await _invitationService.CreateAsync(request.Email, request.Role);
+        var registerLink = await _invitationService.CreateAsync(request.Email, request.Role);
 
-        return NoContent();
+        return Ok(new InvitationResponse(registerLink));
     }
 }

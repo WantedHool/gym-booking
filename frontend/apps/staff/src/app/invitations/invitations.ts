@@ -20,6 +20,8 @@ export class Invitations {
   protected readonly submitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly registerLink = signal<string | null>(null);
+  protected readonly copied = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -34,18 +36,30 @@ export class Invitations {
 
     this.errorMessage.set(null);
     this.successMessage.set(null);
+    this.registerLink.set(null);
+    this.copied.set(false);
     this.submitting.set(true);
     const { email, role } = this.form.getRawValue();
     this.api.send({ email, role }).subscribe({
-      next: () => {
+      next: (response) => {
         this.submitting.set(false);
-        this.successMessage.set(`Η πρόσκληση στάλθηκε στο ${email}.`);
+        this.successMessage.set(`Η πρόσκληση για ${email} δημιουργήθηκε. Στείλε το παρακάτω link:`);
+        this.registerLink.set(response.registerLink);
         this.form.reset({ email: '', role: 'User' });
       },
       error: () => {
         this.submitting.set(false);
-        this.errorMessage.set('Αποτυχία αποστολής πρόσκλησης.');
+        this.errorMessage.set('Αποτυχία δημιουργίας πρόσκλησης.');
       },
     });
+  }
+
+  async copyLink(): Promise<void> {
+    const link = this.registerLink();
+    if (!link) {
+      return;
+    }
+    await navigator.clipboard.writeText(link);
+    this.copied.set(true);
   }
 }

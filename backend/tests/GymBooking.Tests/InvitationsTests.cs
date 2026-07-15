@@ -115,7 +115,7 @@ public class InvitationsTests : IClassFixture<TestApiFactory>
     }
 
     [Fact]
-    public async Task CreateInvitation_as_admin_sends_email_with_token()
+    public async Task CreateInvitation_as_admin_returns_register_link_with_token()
     {
         await CreateUserAsync("invite-admin-ok@demo.gym", "Test1234!", Roles.Admin);
         var client = _factory.CreateClient();
@@ -124,7 +124,12 @@ public class InvitationsTests : IClassFixture<TestApiFactory>
 
         var response = await client.PostAsJsonAsync("/invitations", new CreateInvitationRequest("invitee3@demo.gym", Roles.Instructor));
 
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<InvitationResponse>();
+        Assert.NotNull(body);
+        Assert.Contains("token=", body!.RegisterLink);
+
+        // Το email εξακολουθεί να «στέλνεται» (dev: Papercut) — ο FakeEmailSender το καταγράφει.
         var emailSender = _factory.Services.GetRequiredService<FakeEmailSender>();
         Assert.Contains(emailSender.SentEmails, e => e.To == "invitee3@demo.gym" && e.Body.Contains("token="));
     }
