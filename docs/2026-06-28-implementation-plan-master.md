@@ -5408,9 +5408,17 @@ Expected: όλα PASS.
 > Αναλυτικό πλάνο: [2026-07-14-phase7-admin-dashboard-plan.md](2026-07-14-phase7-admin-dashboard-plan.md) (18 tasks, GROUPS A–E). Εύρημα εκτός scope: προϋπάρχον bug στο staff sidenav drawer σε στενές οθόνες — καταγράφηκε ως ξεχωριστό task, να συμπεριληφθεί στη Φάση 8.
 
 ### Phase 8 — Hardening + security + deployment (~12h)
+
+**Μέρος A — Deployment (demo/tests) — ✅ ολοκληρώθηκε 15 Ιουλίου**
+- [x] Seed/demo data για παρουσίαση (`DemoDataSeeder` — πλούσιο demo tenant· 2ος tenant config-driven μέσω `Seed:AdditionalTenants`, δείχνει isolation).
+- [x] Dockerize API (`Dockerfile`, multi-stage) + deploy: Render (API Web Service + 2 Angular Static Sites) + Neon Postgres. *(Το αρχικό πλάνο προέβλεπε ghcr.io + SSH deploy — αντικαταστάθηκε από Render, απλούστερο για demo/free-tier.)*
+- [x] Invite-link flow, production-safe email sender, auto-migrate στο startup, CORS (config-driven allowed origins).
+
+> Αναλυτικό πλάνο: [2026-07-14-phase8-deployment-plan.md](2026-07-14-phase8-deployment-plan.md) (13 tasks). Πλήρες runbook + credentials + Render gotchas: [deployment-runbook.md](deployment-runbook.md). Live URLs: customer https://gym-booking-2.onrender.com · staff https://gym-booking-1.onrender.com · API https://gym-booking-0e32.onrender.com.
+
+**Μέρος B — Hardening + security — ⏳ εκκρεμεί**
 - [ ] Security pass: OWASP checklist, resource-ownership checks παντού, .NET analyzers, (SHOULD: rate limiting/lockout, refresh token rotation, httpOnly cookie).
-- [ ] Seed/demo data για παρουσίαση (2 tenants → δείξε isolation).
-- [ ] Dockerize: `Dockerfile` Api + `Dockerfile` (nginx) Angular + compose. CD job (build image → ghcr.io → SSH deploy, manual approval).
+- [ ] Staff sidenav drawer bug σε στενές οθόνες (καταγράφηκε στη Φ7, αναβλήθηκε για εδώ).
 - [ ] (SHOULD: PWA — πρώτο που κόβεται.)
 - [ ] ER diagram + architecture diagram (`nx graph`) για το κείμενο πτυχιακής.
 

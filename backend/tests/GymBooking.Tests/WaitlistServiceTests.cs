@@ -52,10 +52,23 @@ public class WaitlistServiceTests
     {
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
         await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
+        var joiner = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, joiner);
+
+        var outcome = await JoinAsync(tenantId, joiner, sessionId);
+
+        Assert.Equal(WaitlistOutcome.Joined, outcome);
+    }
+
+    [Fact]
+    public async Task Join_without_subscription_returns_NoSubscription()
+    {
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
+        await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
 
         var outcome = await JoinAsync(tenantId, Guid.NewGuid(), sessionId);
 
-        Assert.Equal(WaitlistOutcome.Joined, outcome);
+        Assert.Equal(WaitlistOutcome.NoSubscription, outcome);
     }
 
     [Fact]
@@ -74,6 +87,7 @@ public class WaitlistServiceTests
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1);
         await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
         var userId = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
         await JoinAsync(tenantId, userId, sessionId);
 
         var outcome = await JoinAsync(tenantId, userId, sessionId);
@@ -88,6 +102,8 @@ public class WaitlistServiceTests
         await FillSessionAsync(tenantId, sessionId, Guid.NewGuid());
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, first);
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, second);
         await JoinAsync(tenantId, first, sessionId);
         await JoinAsync(tenantId, second, sessionId);
 

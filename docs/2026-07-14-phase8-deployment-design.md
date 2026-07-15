@@ -2,7 +2,7 @@
 
 > **Scope αυτού του sub-project:** να τρέχει η εφαρμογή σε ένα **σταθερό δημόσιο URL**, προσβάσιμο από κινητά, **δωρεάν**, μόνο για παρουσίαση/tests (όχι πραγματική χρήση/production traffic). Είναι το **πρώτο** από τα κομμάτια της Φάσης 8· τα υπόλοιπα (security pass, sidenav bug, πλήρες CI/CD gate) μένουν για επόμενα sub-projects.
 >
-> **Spec (single source of truth):** [2026-06-28-gym-booking-design.md](2026-06-28-gym-booking-design.md) · **Implementation plan:** [2026-06-28-implementation-plan.md](2026-06-28-implementation-plan.md)
+> **Spec (single source of truth):** [2026-06-28-gym-booking-design.md](2026-06-28-gym-booking-design.md) · **Implementation plan:** [2026-06-28-implementation-plan-master.md](2026-06-28-implementation-plan-master.md)
 
 ## Στόχος & περιορισμοί
 

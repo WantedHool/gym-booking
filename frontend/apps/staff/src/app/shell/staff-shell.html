@@ -1,4 +1,4 @@
-<div class="min-h-screen flex flex-col bg-[var(--app-bg-page)]">
+<div class="min-h-dvh flex flex-col bg-[var(--app-bg-page)]">
   <header class="flex items-center justify-between px-4 py-3 bg-[var(--app-bg-surface)] border-b border-[var(--app-border)]">
     <div class="flex items-center gap-2">
       <button mat-icon-button (click)="toggleSidenav()" aria-label="Μενού">
@@ -112,7 +112,7 @@
     </mat-sidenav>
 
     <mat-sidenav-content>
-      <main class="p-4 lg:p-8 max-w-5xl mx-auto">
+      <main class="px-4 pt-2 pb-4 lg:px-8 lg:pt-4 lg:pb-8 max-w-5xl mx-auto">
         <router-outlet></router-outlet>
       </main>
     </mat-sidenav-content>

@@ -45,6 +45,13 @@ public class WaitlistService
             return WaitlistOutcome.AlreadyOnWaitlist;
         }
 
+        // Ίδια απαίτηση με την κράτηση: χωρίς ενεργή/χρήσιμη συνδρομή δεν προωθείσαι ποτέ από τη λίστα
+        // (το auto-promote στο BookingService τον κόβει), άρα μπλοκάρουμε ήδη στην είσοδο.
+        if (!await HasUsableSubscriptionAsync(userId))
+        {
+            return WaitlistOutcome.NoSubscription;
+        }
+
         _dbContext.WaitlistEntries.Add(new WaitlistEntry
         {
             Id = Guid.NewGuid(),
@@ -56,6 +63,20 @@ public class WaitlistService
         });
         await _dbContext.SaveChangesAsync();
         return WaitlistOutcome.Joined;
+    }
+
+    // Read-only έλεγχος (ΔΕΝ καταναλώνει θέση) — ίδια κριτήρια χρησιμότητας με το
+    // BookingService.TryConsumeSubscriptionAsync: active + εντός ισχύος + διαθέσιμες θέσεις.
+    // TenantId φιλτράρεται αυτόματα από το global query filter.
+    private async Task<bool> HasUsableSubscriptionAsync(Guid userId)
+    {
+        var now = DateTime.UtcNow;
+        return await _dbContext.Subscriptions
+            .AnyAsync(s => s.UserId == userId
+                && s.Status == SubscriptionStatus.Active
+                && s.ValidFrom <= now
+                && now <= s.ValidTo
+                && (s.RemainingSessions == null || s.RemainingSessions > 0));
     }
 
     public async Task<WaitlistOutcome> LeaveAsync(Guid userId, Guid classSessionId)

@@ -34,6 +34,16 @@
     </mat-form-field>
   </div>
 
+  @if (subscriptionLoaded() && !hasSubscription()) {
+    <div class="app-card-padded flex items-start gap-2" role="status">
+      <mat-icon class="text-[var(--app-accent)] shrink-0">info</mat-icon>
+      <p class="app-text-muted">
+        Δεν έχεις ενεργή συνδρομή, γι' αυτό δεν μπορείς να κάνεις κράτηση ή να μπεις σε λίστα
+        αναμονής. Απευθύνσου στη γραμματεία.
+      </p>
+    </div>
+  }
+
   @if (message(); as m) {
     <lib-error-banner [message]="m" />
   }
@@ -47,6 +57,7 @@
           [session]="s"
           [dateFormat]="dateFormats.session"
           [waitlistPosition]="waitlistPosition(s)"
+          [canBook]="hasSubscription()"
           (bookSession)="book($event)"
           (cancelSession)="cancel($event)"
           (joinWaitlist)="joinWaitlist($event)"

@@ -29,6 +29,7 @@ public class WaitlistController : ControllerBase
             WaitlistOutcome.SessionNotFull => Conflict("Υπάρχει διαθέσιμη θέση — κάνε κανονική κράτηση."),
             WaitlistOutcome.AlreadyBooked => Conflict("Έχεις ήδη κράτηση σε αυτό το session."),
             WaitlistOutcome.AlreadyOnWaitlist => Conflict("Είσαι ήδη στη λίστα αναμονής."),
+            WaitlistOutcome.NoSubscription => Conflict("Δεν έχεις ενεργή συνδρομή."),
             _ => BadRequest(),
         };
     }

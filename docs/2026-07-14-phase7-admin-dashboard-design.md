@@ -1,7 +1,7 @@
 # Φάση 7 — Admin/Staff dashboard + Responsive QA (design)
 
 > Spec της Φ7. Single source of truth για την υλοποίηση· το detailed implementation plan παράγεται από εδώ.
-> Σχετικά: [spec](2026-06-28-gym-booking-design.md) · [implementation plan](2026-06-28-implementation-plan.md)
+> Σχετικά: [spec](2026-06-28-gym-booking-design.md) · [implementation plan](2026-06-28-implementation-plan-master.md)
 
 ## Σκοπός
 Εργαλεία διαχείρισης για το προσωπικό του γυμναστηρίου πέρα από τη δημιουργία μαθημάτων:

@@ -5,7 +5,7 @@
 ## Τι είναι
 Multi-tenant SaaS web app για διαχείριση κρατήσεων & προγραμμάτων γυμναστηρίου.
 Διπλός σκοπός: πτυχιακή + βάση για πραγματικό προϊόν.
-**Πλήρες spec (single source of truth):** [docs/2026-06-28-gym-booking-design.md](docs/2026-06-28-gym-booking-design.md) · **Implementation plan:** [docs/2026-06-28-implementation-plan.md](docs/2026-06-28-implementation-plan.md)
+**Πλήρες spec (single source of truth):** [docs/2026-06-28-gym-booking-design.md](docs/2026-06-28-gym-booking-design.md) · **Implementation plan:** [docs/2026-06-28-implementation-plan-master.md](docs/2026-06-28-implementation-plan-master.md)
 
 ## Stack
 - **Frontend:** Angular 21 **Nx** monorepo (1 workspace) → `customer` app (mobile-first) + `staff` app (desktop-first) + shared libs. Material + Tailwind v4 + Signals.
@@ -59,14 +59,15 @@ _(ενημέρωνέ το καθώς προχωράς — έτσι ένα νέο
 - [x] Φ5 — Subscriptions/plans + consumption
 - [x] Φ6 — Waitlist + cancellation policy
 - [x] Φ7 — Admin/staff dashboard + responsive QA
-- [ ] Φ8 — Hardening + security + deployment (Docker/CI-CD)
+- [x] Φ8 Μέρος A — Deployment (Render + Neon) ✅ · Μέρος B (hardening/security) εκκρεμεί
 
-**Τώρα δουλεύω:** Setup ✅ + Φ1 ✅ + Φ2 ✅ + Φ3 ✅ + Φ4 ✅ + Φ5 ✅ + Φ6 ✅ + Φ7 ✅ (ολοκληρωμένο 14 Ιουλίου, βάσει [docs/2026-07-14-phase7-admin-dashboard-plan.md](docs/2026-07-14-phase7-admin-dashboard-plan.md)· `UserService`/`UsersController` (list/role/active, self-modify guard), `ApplicationUser.CreatedAt` + migration, staff booking oversight (`GetRosterAsync`, `BookForAsync` walk-in, `CancelByStaffAsync` — refactor `CancelAsync`→`CancelCoreAsync` κοινός πυρήνας), `TenantSettingsService`/`TenantController` (name + `CancellationHours`), reject-inactive-login· FE: `users`/`settings`/`sessions/:id/roster` staff pages, νέα data-access services, admin-only nav wiring, responsive QA pass (customer mobile 390px + staff desktop 1280px/tablet 768px — κανένα overflow στις νέες σελίδες). **Εύρημα εκτός scope:** προϋπάρχον bug στο staff sidenav drawer σε στενές οθόνες (μένει εκτός οθόνης όταν ανοίγει, stuck CSS transition) — καταγράφηκε ως ξεχωριστό background task, δεν το προκάλεσε η Φ7. **Πρόοδος: ~98h / ~98h (~100% του αρχικού πλάνου).** **Επόμενο: Φ8 — Hardening + security + deployment** (θα αναλυθεί σε bite-sized tasks όταν ξεκινήσουμε· θα χρειαστεί να συμπεριλάβει και το drawer bug).
+**Τώρα δουλεύω:** Φ8 Μέρος A ολοκληρώθηκε (15 Ιουλίου, βάσει [docs/2026-07-14-phase8-deployment-plan.md](docs/2026-07-14-phase8-deployment-plan.md)). **Live URLs:** customer https://gym-booking-2.onrender.com · staff https://gym-booking-1.onrender.com · API https://gym-booking-0e32.onrender.com · πλήρες runbook + credentials: [docs/deployment-runbook.md](docs/deployment-runbook.md). Invite-link endpoint (200+registerLink), `LoggingEmailSender` (prod-safe), auto-migrate/forwarded-headers, API Dockerfile, `DemoDataSeeder` (πλούσιο demo tenant), config-driven 2ος tenant seed, staff invite-link UI. **Αρχιτεκτονική άλλαξε εν πορεία:** το πλάνο προέβλεπε same-origin rewrite-proxy μέσω Render Static Site rewrites — αποδείχθηκε αναξιόπιστο (3 ξεχωριστά Render-specific bugs: `:splat` δεν είναι έγκυρο syntax, rule-ordering, edge caching αγνοεί το `Authorization` header σε authenticated responses). Λύση: CORS στο API + `apiBaseUrlInterceptor` στο FE (absolute API URL, config-driven). **Post-fix:** τα παλιά API rewrite rules στα static sites έμειναν αρχικά ως "προαιρετικό cleanup" — αποδείχθηκε ότι ενεργά έσπαγαν το reload σε Angular routes με ίδιο path/name με API prefix (π.χ. `/schedule`, `/users`) → 404/401 αντί για SPA fallback. Διορθώθηκε: σβήστηκαν όλα τα rewrite rules, έμεινε μόνο `/* → /index.html`. Όλα τα gotchas καταγεγραμμένα στο runbook. **Επόμενο: Φ8 Μέρος B — Hardening + security** (θα αναλυθεί σε bite-sized tasks όταν ξεκινήσουμε· θα χρειαστεί να συμπεριλάβει και το staff sidenav drawer bug από τη Φ7).
 > ⚙️ **Μοτίβο υλοποίησης (από Φ2):** ο **Claude γράφει** τον κώδικα (+ εξηγεί), ο **χρήστης κάνει review**. Πριν από κάθε ενέργεια → επιβεβαίωση. Ποτέ commit (το κάνει ο χρήστης).
 > 🚀 **Πριν κωδικοποίηση:** `nvm use 20` (frontend) · `docker compose -f docker/docker-compose.yml up -d` (DB).
 
 ## Σημειώσεις / ανοιχτά θέματα
 _(ό,τι θες να θυμάσαι ή να συζητήσουμε αργότερα)_
-- **Git:** local identity = προσωπικό (`Xrhstos Rimpas <christarasrib@gmail.com>`)· το global εργασιακό (`chrimpas@eurotel.gr`) μένει ανέπαφο. GitHub repo (push + CI activation + branch protection) = επόμενη φάση, το κάνει ο χρήστης.
+- **Git:** local identity = προσωπικό (`Xrhstos Rimpas <christarasrib@gmail.com>`)· το global εργασιακό (`chrimpas@eurotel.gr`) μένει ανέπαφο. **GitHub repo:** [github.com/WantedHool/gym-booking](https://github.com/WantedHool/gym-booking) (private, push έγινε στη Φ8) — CI activation + branch protection ακόμα εκκρεμούν.
+- **Deployment:** Render (API Web Service + 2 Static Sites) + Neon Postgres (eu-central-1). Πλήρες runbook: [docs/deployment-runbook.md](docs/deployment-runbook.md).
 - **NuGet gotcha:** εταιρικό feed `nuget.eurotel.gr` (401) → λύθηκε με `nuget.config` (`<clear/>` + nuget.org).
 - **Deprecation:** ο `@nx/eslint:lint` executor θα καταργηθεί στο Nx v24 (migration `convert-to-inferred` σε hardening).

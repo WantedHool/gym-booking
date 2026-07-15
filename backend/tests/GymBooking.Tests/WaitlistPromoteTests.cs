@@ -80,13 +80,16 @@ public class WaitlistPromoteTests
     }
 
     [Fact]
-    public async Task Promote_skips_waiter_without_subscription_and_takes_next()
+    public async Task Promote_skips_waiter_with_unusable_subscription_and_takes_next()
     {
+        // Safety-net του auto-promote: μπαίνεις στη λίστα με έγκυρη συνδρομή, αλλά μέχρι να
+        // ελευθερωθεί θέση η συνδρομή ακυρώθηκε/έληξε → σε προσπερνά και προωθεί τον επόμενο.
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
         var holder = Guid.NewGuid();
-        var noSub = Guid.NewGuid();      // 1ος στη λίστα, ΧΩΡΙΣ συνδρομή → skip
-        var withSub = Guid.NewGuid();    // 2ος, με συνδρομή → προωθείται
+        var lostSub = Guid.NewGuid();    // 1ος στη λίστα· η συνδρομή του θα ακυρωθεί πριν το promote → skip
+        var withSub = Guid.NewGuid();    // 2ος, με ενεργή συνδρομή → προωθείται
         await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, lostSub);
         await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, withSub);
 
         Booking booking;
@@ -97,19 +100,28 @@ public class WaitlistPromoteTests
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            await Waitlist(scope, tenantId).JoinAsync(noSub, sessionId);   // μπαίνει 1ος
+            await Waitlist(scope, tenantId).JoinAsync(lostSub, sessionId);  // μπαίνει 1ος (με συνδρομή)
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            await Waitlist(scope, tenantId).JoinAsync(withSub, sessionId); // μπαίνει 2ος
+            await Waitlist(scope, tenantId).JoinAsync(withSub, sessionId);  // μπαίνει 2ος
+        }
+        using (var scope = _factory.Services.CreateScope())
+        {
+            // Ακύρωση της συνδρομής του 1ου μετά την είσοδό του στη λίστα.
+            scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var sub = await db.Subscriptions.FirstAsync(s => s.UserId == lostSub);
+            sub.Status = SubscriptionStatus.Cancelled;
+            await db.SaveChangesAsync();
         }
         using (var scope = _factory.Services.CreateScope())
         {
             await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
         }
 
-        Assert.False(await HasConfirmedBookingAsync(tenantId, noSub, sessionId));   // skipped
-        Assert.True(await HasConfirmedBookingAsync(tenantId, withSub, sessionId));  // promoted
+        Assert.False(await HasConfirmedBookingAsync(tenantId, lostSub, sessionId));  // skipped
+        Assert.True(await HasConfirmedBookingAsync(tenantId, withSub, sessionId));   // promoted
     }
 
     [Fact]

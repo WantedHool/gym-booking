@@ -11,9 +11,10 @@ import {
   ClassTypeApiService,
   InstructorApiService,
   ScheduleApiService,
+  SubscriptionApiService,
   WaitlistApiService,
 } from '@frontend/data-access';
-import { ClassType, Instructor, ScheduleSession } from '@frontend/models';
+import { ClassType, Instructor, ScheduleSession, Subscription } from '@frontend/models';
 import {
   CUSTOMER_DATE_FORMATS,
   EmptyState,
@@ -49,6 +50,7 @@ export class Schedule {
   private readonly classTypeApi = inject(ClassTypeApiService);
   private readonly instructorApi = inject(InstructorApiService);
   private readonly waitlistApi = inject(WaitlistApiService);
+  private readonly subscriptionApi = inject(SubscriptionApiService);
 
   protected readonly weekStart = signal(this.mondayOf(new Date()));
   protected readonly sessions = signal<ScheduleSession[]>([]);
@@ -59,6 +61,8 @@ export class Schedule {
   protected readonly message = signal<string | null>(null);
   protected readonly loading = signal(false);
   protected readonly waitlistPositions = signal<Record<string, number>>({});
+  protected readonly subscription = signal<Subscription | null>(null);
+  protected readonly subscriptionLoaded = signal(false);
 
   protected readonly weekEnd = computed(() => {
     const d = new Date(this.weekStart());
@@ -66,11 +70,33 @@ export class Schedule {
     return d;
   });
 
+  // Ίδια κριτήρια χρησιμότητας με το backend gate (WaitlistService/BookingService):
+  // εντός ισχύος + (unlimited ή απομένουν προπονήσεις). Το /subscriptions/me μπορεί να
+  // επιστρέψει active-status συνδρομή που όμως έχει λήξει ή εξαντληθεί, γι' αυτό δεν αρκεί ο έλεγχος != null.
+  protected readonly hasSubscription = computed(() => {
+    const s = this.subscription();
+    if (!s) {
+      return false;
+    }
+    const now = Date.now();
+    if (now < new Date(s.validFrom).getTime() || now > new Date(s.validTo).getTime()) {
+      return false;
+    }
+    return s.remainingSessions === null || s.remainingSessions > 0;
+  });
+
   constructor() {
     this.classTypeApi.getAll().subscribe((x) => this.classTypes.set(x));
     this.instructorApi.getAll().subscribe((x) => this.instructors.set(x));
     this.load();
     this.loadWaitlist();
+    this.subscriptionApi.getMine().subscribe({
+      next: (s) => {
+        this.subscription.set(s);
+        this.subscriptionLoaded.set(true);
+      },
+      error: () => this.subscriptionLoaded.set(true),
+    });
   }
 
   private mondayOf(date: Date): Date {

@@ -88,6 +88,7 @@ public class WaitlistEndpointsTests
     {
         var user = await CreateUserAsync("waiter@demo.gym", "Test1234!", Roles.User);
         var sessionId = await SeedFullSessionAsync(user.TenantId, Guid.NewGuid());
+        await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);
 
         var client = _factory.CreateClient();
         var token = await LoginAsync(client, "waiter@demo.gym", "Test1234!");
@@ -105,6 +106,7 @@ public class WaitlistEndpointsTests
     {
         var user = await CreateUserAsync("leaver@demo.gym", "Test1234!", Roles.User);
         var sessionId = await SeedFullSessionAsync(user.TenantId, Guid.NewGuid());
+        await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);
 
         var client = _factory.CreateClient();
         var token = await LoginAsync(client, "leaver@demo.gym", "Test1234!");

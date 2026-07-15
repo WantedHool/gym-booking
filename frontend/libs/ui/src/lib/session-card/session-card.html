@@ -21,10 +21,10 @@
       @if (waitlistPosition(); as pos) {
         <span class="app-text-muted text-sm">Λίστα αναμονής: #{{ pos }}</span>
         <button mat-button (click)="leaveWaitlist.emit(session())">Έξοδος</button>
-      } @else {
+      } @else if (canBook()) {
         <button mat-stroked-button (click)="joinWaitlist.emit(session())">Λίστα αναμονής</button>
       }
-    } @else {
+    } @else if (canBook()) {
       <button mat-flat-button color="primary" (click)="bookSession.emit(session())">Κράτηση</button>
     }
   </div>
