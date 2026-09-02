@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -40,8 +41,22 @@ export class Login {
         this.submitting.set(false);
         this.router.navigateByUrl('/dashboard');
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.submitting.set(false);
+
+        // 429: rate-limited από το API (πολλές προσπάθειες ανά IP). 423: ο λογαριασμός κλειδώθηκε
+        // (πολλές αποτυχίες password). Και στις δύο δεν πρόκειται για λάθος credentials → ξεχωριστό
+        // μήνυμα, χωρίς να μαρκάρουμε τα πεδία ως invalid.
+        if (error.status === 429) {
+          this.errorMessage.set('Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά σε λίγο.');
+          return;
+        }
+
+        if (error.status === 423) {
+          this.errorMessage.set('Ο λογαριασμός κλειδώθηκε προσωρινά λόγω πολλών αποτυχημένων προσπαθειών. Δοκιμάστε ξανά σε λίγα λεπτά.');
+          return;
+        }
+
         this.errorMessage.set('Λάθος email ή κωδικός.');
         this.form.controls.email.setErrors({ invalidCredentials: true });
         this.form.controls.password.setErrors({ invalidCredentials: true });

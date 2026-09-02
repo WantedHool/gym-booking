@@ -1,0 +1,83 @@
+# Full-stack τοπικό demo — τρέχει ΟΛΟ το σύστημα με μία εντολή, χωρίς εγκατάσταση .NET/Node:
+#
+#     docker compose -f docker-compose.full.yml up --build
+#
+# Μετά το build (auto-migrate + demo seed τρέχουν μόνα τους στο API):
+#   • Customer app  → http://localhost:4200   (login: member3@demo.gym / Demo1234!)
+#   • Staff app     → http://localhost:4201   (login: admin@demo.gym / Admin123!)
+#   • API + Scalar  → http://localhost:8080/scalar/v1
+#   • Papercut (τα emails π.χ. invitations) → http://localhost:8025
+#
+# Σταμάτημα:            docker compose -f docker-compose.full.yml down
+# Καθάρισμα και της βάσης: docker compose -f docker-compose.full.yml down -v
+#
+# (Το docker/docker-compose.yml μένει για local development — σηκώνει μόνο Postgres + Papercut.)
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gym
+      POSTGRES_PASSWORD: gym_dev_pw
+      POSTGRES_DB: gymbooking
+    ports:
+      - "5432:5432"
+    volumes:
+      - gym-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gym -d gymbooking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  papercut:
+    image: changemakerstudiosus/papercut-smtp:latest
+    restart: unless-stopped
+    ports:
+      - "2525:2525" # SMTP — εδώ "στέλνει" το API
+      - "8025:8080" # Web UI — δες τα emails στο http://localhost:8025
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: src/GymBooking.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Development → SmtpEmailSender (Papercut) + Scalar docs· το CORS επιτρέπει ήδη 4200/4201.
+      ASPNETCORE_ENVIRONMENT: Development
+      # Override των dev appsettings ώστε να δείχνουν στα containers αντί για localhost.
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=gymbooking;Username=gym;Password=gym_dev_pw"
+      Email__SmtpHost: papercut
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      papercut:
+        condition: service_started
+
+  customer:
+    build:
+      context: ./frontend
+      args:
+        APP: customer
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    depends_on:
+      - api
+
+  staff:
+    build:
+      context: ./frontend
+      args:
+        APP: staff
+    restart: unless-stopped
+    ports:
+      - "4201:80"
+    depends_on:
+      - api
+
+volumes:
+  gym-postgres-data:

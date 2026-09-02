@@ -5,6 +5,7 @@ using GymBooking.Core.Multitenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace GymBooking.Api.Controllers;
@@ -35,6 +36,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
     {
         // Δεν ξέρουμε ακόμα το tenant του χρήστη — το CurrentTenant είναι Guid.Empty σε αυτό το
@@ -60,7 +62,19 @@ public class AuthController : ControllerBase
         // (π.χ. UserManager.GetRolesAsync) το query filter δουλεύει σωστά.
         _currentTenant.SetTenant(user.TenantId);
 
-        var passwordCheck = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: false);
+        // lockoutOnFailure: true → κάθε αποτυχία αυξάνει το AccessFailedCount· στις 5 ο λογαριασμός
+        // κλειδώνει για 15' (βλ. Lockout options στο Program.cs). Επιτυχές login το μηδενίζει.
+        var passwordCheck = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+
+        if (passwordCheck.IsLockedOut)
+        {
+            // 423 Locked: ξεχωριστό από το 401 ώστε το UI να δείχνει σαφές μήνυμα στον χρήστη.
+            return StatusCode(StatusCodes.Status423Locked, new
+            {
+                message = "Ο λογαριασμός κλειδώθηκε προσωρινά λόγω πολλών αποτυχημένων προσπαθειών. Δοκιμάστε ξανά σε λίγα λεπτά.",
+            });
+        }
+
         if (!passwordCheck.Succeeded)
         {
             return Unauthorized();

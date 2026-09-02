@@ -1,0 +1,8 @@
+node_modules
+dist
+.nx
+.angular
+tmp
+**/*.spec.ts
+Dockerfile
+.dockerignore

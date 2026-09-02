@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using GymBooking.Api.Interfaces;
 using GymBooking.Api.Services;
 using GymBooking.Api.Utilities;
@@ -10,6 +11,7 @@ using GymBooking.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -44,6 +46,45 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod());
 });
 
+// Rate limiting (built-in .NET): προστασία του /auth/login από brute-force/credential-stuffing.
+// Policy "login" — fixed window ανά client IP: max 10 προσπάθειες / λεπτό, μετά 429 + Retry-After.
+// Το πραγματικό client IP έρχεται σωστά πίσω από τον Render proxy χάρη στα ForwardedHeaders παρακάτω.
+// Στο Testing environment απενεργοποιείται (no limiter) — τα integration tests κάνουν πολλά logins
+// από το ίδιο loopback IP και θα χτυπούσαν αλλιώς το όριο.
+const string LoginRateLimitPolicy = "login";
+var isTestingEnv = builder.Environment.IsEnvironment("Testing");
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(LoginRateLimitPolicy, httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        if (isTestingEnv)
+        {
+            return RateLimitPartition.GetNoLimiter(clientIp);
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        await context.HttpContext.Response.WriteAsync(
+            "Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά σε λίγο.", cancellationToken);
+    };
+});
+
 // Tenant context: CurrentTenant + ICurrentTenant πρέπει να resolve στο ΙΔΙΟ scoped instance
 // (ICurrentTenant το διαβάζει ο AppDbContext, CurrentTenant.SetTenant το γεμίζει το middleware).
 builder.Services.AddScoped<CurrentTenant>();
@@ -63,7 +104,14 @@ if (!builder.Environment.IsEnvironment("Testing"))
 }
 
 // ASP.NET Core Identity: user/role management, password hashing, sign-in checks.
-builder.Services.AddIdentity<ApplicationUser, ApplicationRole>()
+// Lockout: μετά από 5 συνεχόμενες αποτυχημένες προσπάθειες ο λογαριασμός κλειδώνει για 15 λεπτά
+// (brute-force mitigation). Το AccessFailedCount μηδενίζεται σε επιτυχές login.
+builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
+    {
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.Lockout.AllowedForNewUsers = true;
+    })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
@@ -194,6 +242,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(AppCorsPolicy);
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
