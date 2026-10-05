@@ -4,7 +4,7 @@ Scripts και αποτελέσματα των μετρήσεων που απα�
 
 ## Προαπαιτούμενα
 - .NET SDK 10 και Docker Desktop σε λειτουργία (τα πειράματα σηκώνουν δική τους PostgreSQL 16 μέσω Testcontainers).
-- Για το Lighthouse: Node.js 20 και το πλήρες stack (`docker compose -f docker-compose.full.yml up --build`).
+- Για το Lighthouse: Node.js 20 και το πλήρες stack (`docker compose -f docker/docker-compose.full-stack.yml up --build`).
 
 ## Εκτέλεση
 

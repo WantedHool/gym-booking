@@ -162,7 +162,7 @@ internal static class EvaluationSupport
     public static string ResultsDirectory()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "docker-compose.full.yml")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "docker", "docker-compose.full-stack.yml")))
         {
             dir = dir.Parent;
         }

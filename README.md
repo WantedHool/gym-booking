@@ -30,17 +30,17 @@ frontend/          Nx workspace
   apps/customer          Εφαρμογή μελών (mobile-first)
   apps/staff             Εφαρμογή προσωπικού (desktop-first)
   libs/                  models, data-access, auth, ui
-docker/            PostgreSQL + Papercut για ανάπτυξη
+docker/            docker-compose.infra.yml (μόνο PostgreSQL + Papercut, για ανάπτυξη)
+                   docker-compose.full-stack.yml (ολόκληρο το σύστημα)
 evaluation/        Script και αποτελέσματα της αξιολόγησης
-docker-compose.full.yml  Ολόκληρο το σύστημα με μία εντολή
 ```
 
 ## Γρήγορη εκκίνηση (Docker)
 
-**Προαπαιτούμενο:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) σε λειτουργία. Δεν χρειάζεται εγκατάσταση .NET, Node.js ή PostgreSQL.
+**Προαπαιτούμενο:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) σε λειτουργία. Δεν χρειάζεται εγκατάσταση .NET, Node.js ή PostgreSQL. Οι εντολές εκτελούνται από τον ριζικό φάκελο του αποθετηρίου.
 
 ```bash
-docker compose -f docker-compose.full.yml up --build
+docker compose -f docker/docker-compose.full-stack.yml up --build
 ```
 
 Την πρώτη φορά το build διαρκεί μερικά λεπτά. Κατά την εκκίνηση, το API εφαρμόζει αυτόματα τα migrations και γεμίζει τη βάση με δοκιμαστικά δεδομένα.
@@ -66,8 +66,8 @@ docker compose -f docker-compose.full.yml up --build
 **Τερματισμός:**
 
 ```bash
-docker compose -f docker-compose.full.yml down      # σταματά τις υπηρεσίες
-docker compose -f docker-compose.full.yml down -v   # διαγράφει και τη βάση (καθαρή εκκίνηση)
+docker compose -f docker/docker-compose.full-stack.yml down      # σταματά τις υπηρεσίες
+docker compose -f docker/docker-compose.full-stack.yml down -v   # διαγράφει και τη βάση (καθαρή εκκίνηση)
 ```
 
 ## Εκτέλεση για ανάπτυξη (χωρίς Docker)
@@ -76,7 +76,7 @@ docker compose -f docker-compose.full.yml down -v   # διαγράφει και 
 
 ```bash
 # 1. PostgreSQL 16 και Papercut
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.infra.yml up -d
 
 # 2. API — http://localhost:5076 (Scalar: /scalar/v1)
 cd backend
@@ -100,7 +100,7 @@ cd frontend && npx nx run-many -t lint test build # 26 δοκιμές, lint κα
 
 ## Μεταβλητές περιβάλλοντος
 
-Οι ρυθμίσεις του API βρίσκονται στα `appsettings.*.json` και αντικαθίστανται από μεταβλητές περιβάλλοντος. Στο `docker-compose.full.yml` υπάρχουν ήδη δοκιμαστικές τιμές· σε εγκατάσταση παραγωγής πρέπει να οριστούν δικές σας τιμές, και τα μυστικά δεν αποθηκεύονται στο αποθετήριο.
+Οι ρυθμίσεις του API βρίσκονται στα `appsettings.*.json` και αντικαθίστανται από μεταβλητές περιβάλλοντος. Στο `docker/docker-compose.full-stack.yml` υπάρχουν ήδη δοκιμαστικές τιμές· σε εγκατάσταση παραγωγής πρέπει να οριστούν δικές σας τιμές, και τα μυστικά δεν αποθηκεύονται στο αποθετήριο.
 
 | Μεταβλητή | Σκοπός |
 |---|---|
@@ -115,9 +115,9 @@ cd frontend && npx nx run-many -t lint test build # 26 δοκιμές, lint κα
 
 ## Συχνά προβλήματα
 
-- **«port is already allocated»:** κάποια από τις θύρες 4200, 4201, 8080, 8025, 5432 ή 2525 χρησιμοποιείται ήδη, π.χ. από το `docker/docker-compose.yml`. Σταματήστε την άλλη υπηρεσία και ξανατρέξτε.
+- **«port is already allocated»:** κάποια από τις θύρες 4200, 4201, 8080, 8025, 5432 ή 2525 χρησιμοποιείται ήδη, π.χ. από το `docker/docker-compose.infra.yml`. Σταματήστε την άλλη υπηρεσία και ξανατρέξτε.
 - **«Cannot connect to the Docker daemon»:** το Docker Desktop δεν λειτουργεί.
-- **Η σύνδεση αποτυγχάνει αμέσως μετά την εκκίνηση:** το API ίσως δεν έχει ολοκληρώσει ακόμη τα migrations. Κατάσταση: http://localhost:8080/health · logs: `docker compose -f docker-compose.full.yml logs api`.
+- **Η σύνδεση αποτυγχάνει αμέσως μετά την εκκίνηση:** το API ίσως δεν έχει ολοκληρώσει ακόμη τα migrations. Κατάσταση: http://localhost:8080/health · logs: `docker compose -f docker/docker-compose.full-stack.yml logs api`.
 - **«Ο λογαριασμός κλειδώθηκε προσωρινά»:** μετά από 5 λανθασμένες προσπάθειες ο λογαριασμός κλειδώνει για 15 λεπτά· μετά από 10 προσπάθειες σύνδεσης μέσα σε ένα λεπτό απαιτείται αναμονή ενός λεπτού.
 
 ## Άδεια και παραπομπή

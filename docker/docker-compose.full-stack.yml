@@ -1,4 +1,4 @@
-
+name: gym-booking-full
 services:
   postgres:
     image: postgres:16
@@ -26,7 +26,7 @@ services:
 
   api:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: src/GymBooking.Api/Dockerfile
     restart: unless-stopped
     environment:
@@ -43,7 +43,7 @@ services:
 
   customer:
     build:
-      context: ./frontend
+      context: ../frontend
       args:
         APP: customer
     restart: unless-stopped
@@ -54,7 +54,7 @@ services:
 
   staff:
     build:
-      context: ./frontend
+      context: ../frontend
       args:
         APP: staff
     restart: unless-stopped
