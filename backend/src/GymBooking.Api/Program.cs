@@ -19,20 +19,14 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog: structured logging στην κονσόλα + αρχείο (ένα ανά μέρα, κρατάει τις τελευταίες 14 μέρες)
 builder.Services.AddSerilog(config => config
     .WriteTo.Console()
     .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14));
 
-// Add services to the container.
 builder.Services.AddControllers();
 
-// OpenAPI spec (built-in) — το διαδραστικό UI το σερβίρει το Scalar παρακάτω
 builder.Services.AddOpenApi();
 
-// CORS: τα Angular apps είναι cross-origin ως προς το API (dev: δικός τους dev-server origin·
-// production: ξεχωριστά Render Static Sites). Bearer token στο header, όχι cookies — δεν
-// χρειάζεται AllowCredentials.
 const string AppCorsPolicy = "AppCors";
 var corsAllowedOrigins = builder.Environment.IsDevelopment()
     ? new[] { "http://localhost:4200", "http://localhost:4201" }
@@ -46,11 +40,6 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod());
 });
 
-// Rate limiting (built-in .NET): προστασία του /auth/login από brute-force/credential-stuffing.
-// Policy "login" — fixed window ανά client IP: max 10 προσπάθειες / λεπτό, μετά 429 + Retry-After.
-// Το πραγματικό client IP έρχεται σωστά πίσω από τον Render proxy χάρη στα ForwardedHeaders παρακάτω.
-// Στο Testing environment απενεργοποιείται (no limiter) — τα integration tests κάνουν πολλά logins
-// από το ίδιο loopback IP και θα χτυπούσαν αλλιώς το όριο.
 const string LoginRateLimitPolicy = "login";
 var isTestingEnv = builder.Environment.IsEnvironment("Testing");
 builder.Services.AddRateLimiter(options =>
@@ -85,27 +74,17 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Tenant context: CurrentTenant + ICurrentTenant πρέπει να resolve στο ΙΔΙΟ scoped instance
-// (ICurrentTenant το διαβάζει ο AppDbContext, CurrentTenant.SetTenant το γεμίζει το middleware).
 builder.Services.AddScoped<CurrentTenant>();
 builder.Services.AddScoped<ICurrentTenant>(sp => sp.GetRequiredService<CurrentTenant>());
 
-// EF Core + PostgreSQL (connection string από appsettings). Στο "Testing" environment
-// (integration tests μέσω WebApplicationFactory) το TestApiFactory καταχωρεί δικό του
-// InMemory AppDbContext — αν καταχωρούσαμε και το Npgsql εδώ, θα συγκρούονταν δύο providers.
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(
             builder.Configuration.GetConnectionString("Default"),
-            // Retry σε παροδικά connection failures — π.χ. αν το API ξεκινήσει λίγο πριν προλάβει
-            // να είναι πλήρως έτοιμη η Postgres (docker compose healthcheck ~ έως 50s).
             npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 }
 
-// ASP.NET Core Identity: user/role management, password hashing, sign-in checks.
-// Lockout: μετά από 5 συνεχόμενες αποτυχημένες προσπάθειες ο λογαριασμός κλειδώνει για 15 λεπτά
-// (brute-force mitigation). Το AccessFailedCount μηδενίζεται σε επιτυχές login.
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     {
         options.Lockout.MaxFailedAccessAttempts = 5;
@@ -115,7 +94,6 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-// JWT: config-driven signing key/issuer/audience + TokenService (stateless, άρα singleton).
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
     ?? throw new InvalidOperationException("Missing 'Jwt' configuration section.");
 builder.Services.AddSingleton(jwtOptions);
@@ -129,8 +107,6 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        // Χωρίς το inbound claim map της Microsoft — ό,τι claim type εκδίδουμε στο TokenService
-        // (πεζά, σύντομα: "sub", "role", "tenantId"), το ίδιο ακριβώς διαβάζουμε παντού.
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -148,17 +124,14 @@ builder.Services
 
 builder.Services.AddAuthorization(options =>
 {
-    // RequireInstructor = Instructor Ή Admin (ο Admin μπορεί ό,τι κι ο instructor).
     options.AddPolicy(Policies.RequireAdmin, policy => policy.RequireRole(Roles.Admin));
     options.AddPolicy(Policies.RequireInstructor, policy => policy.RequireRole(Roles.Instructor, Roles.Admin));
 });
 
-// Email (dev: SmtpEmailSender → Papercut) + Invitations
 var emailOptions = builder.Configuration.GetSection("Email").Get<EmailOptions>()
     ?? throw new InvalidOperationException("Missing 'Email' configuration section.");
 builder.Services.AddSingleton(emailOptions);
 
-// Dev → SmtpEmailSender (Papercut). Αλλού (Production/demo) → LoggingEmailSender (δεν υπάρχει SMTP).
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
@@ -183,21 +156,17 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IRoleReaderWriter, IdentityRoleReaderWriter>();
 builder.Services.AddScoped<TenantSettingsService>();
 
-// Seed: 1 tenant + roles + 1 admin, μόνο σε άδεια βάση (βλ. κλήση seeder.SeedAsync() παρακάτω).
 var seedOptions = builder.Configuration.GetSection("Seed").Get<SeedOptions>()
     ?? throw new InvalidOperationException("Missing 'Seed' configuration section.");
 builder.Services.AddSingleton(seedOptions);
 builder.Services.AddScoped<DbSeeder>();
 builder.Services.AddScoped<DemoDataSeeder>();
 
-// Health checks: ελέγχει και τη σύνδεση με τη βάση μέσω του AppDbContext
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
 
 var app = builder.Build();
 
-// Εφάρμοσε τυχόν pending migrations (deployed container: δεν τρέχει χειροκίνητα το `dotnet ef`)
-// και μετά κάνε seed. Στο Testing (InMemory) δεν υπάρχουν migrations — παρακάμπτεται.
 using (var startupScope = app.Services.CreateScope())
 {
     if (!app.Environment.IsEnvironment("Testing"))
@@ -218,19 +187,14 @@ using (var startupScope = app.Services.CreateScope())
     }
 }
 
-// Serilog request logging (ένα δομημένο log ανά HTTP request)
 app.UseSerilogRequestLogging();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference(); // διαδραστικό API docs UI στο /scalar/v1
+    app.MapScalarApiReference();
 }
 
-// Πίσω από τον reverse proxy του Render το TLS τερματίζεται στον edge· ο container δέχεται HTTP.
-// Τα forwarded headers δίνουν στο app το σωστό scheme/host. Το HTTPS redirect μένει μόνο σε dev
-// (σε production θα προκαλούσε redirect loop — το HTTPS το εγγυάται ήδη ο Render edge).
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
@@ -248,8 +212,6 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Γεμίζει το CurrentTenant από το JWT claim "tenantId" (μόλις το UseAuthentication παραπάνω
-// έχει ήδη επικυρώσει το token και γεμίσει το HttpContext.User).
 app.UseMiddleware<TenantMiddleware>();
 
 app.MapControllers();
@@ -257,7 +219,6 @@ app.MapHealthChecks("/health");
 
 app.Run();
 
-// Public partial ώστε το WebApplicationFactory<Program> (integration tests) να μπορεί να το δει.
 public partial class Program
 {
 }

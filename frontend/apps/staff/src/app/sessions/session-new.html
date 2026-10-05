@@ -16,6 +16,17 @@
         }
       </mat-select>
     </mat-form-field>
+    @if (isAdmin) {
+      <mat-form-field appearance="outline">
+        <mat-label>Προπονητής</mat-label>
+        <mat-select formControlName="instructorId">
+          <mat-option value="">Ο εαυτός μου</mat-option>
+          @for (i of instructors(); track i.id) {
+            <mat-option [value]="i.id">{{ i.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
     <div class="flex gap-4">
       <mat-form-field appearance="outline" class="flex-1">
         <mat-label>Ημερομηνία</mat-label>

@@ -1,17 +1,3 @@
-# Full-stack τοπικό demo — τρέχει ΟΛΟ το σύστημα με μία εντολή, χωρίς εγκατάσταση .NET/Node:
-#
-#     docker compose -f docker-compose.full.yml up --build
-#
-# Μετά το build (auto-migrate + demo seed τρέχουν μόνα τους στο API):
-#   • Customer app  → http://localhost:4200   (login: member3@demo.gym / Demo1234!)
-#   • Staff app     → http://localhost:4201   (login: admin@demo.gym / Admin123!)
-#   • API + Scalar  → http://localhost:8080/scalar/v1
-#   • Papercut (τα emails π.χ. invitations) → http://localhost:8025
-#
-# Σταμάτημα:            docker compose -f docker-compose.full.yml down
-# Καθάρισμα και της βάσης: docker compose -f docker-compose.full.yml down -v
-#
-# (Το docker/docker-compose.yml μένει για local development — σηκώνει μόνο Postgres + Papercut.)
 
 services:
   postgres:
@@ -35,8 +21,8 @@ services:
     image: changemakerstudiosus/papercut-smtp:latest
     restart: unless-stopped
     ports:
-      - "2525:2525" # SMTP — εδώ "στέλνει" το API
-      - "8025:8080" # Web UI — δες τα emails στο http://localhost:8025
+      - "2525:2525"
+      - "8025:8080"
 
   api:
     build:
@@ -44,9 +30,7 @@ services:
       dockerfile: src/GymBooking.Api/Dockerfile
     restart: unless-stopped
     environment:
-      # Development → SmtpEmailSender (Papercut) + Scalar docs· το CORS επιτρέπει ήδη 4200/4201.
       ASPNETCORE_ENVIRONMENT: Development
-      # Override των dev appsettings ώστε να δείχνουν στα containers αντί για localhost.
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=gymbooking;Username=gym;Password=gym_dev_pw"
       Email__SmtpHost: papercut
     ports:

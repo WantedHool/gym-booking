@@ -18,7 +18,6 @@ public class StaffBookingTests
         _factory = factory;
     }
 
-    // Στήνει ClassType + ClassSession σε νέο tenant· επιστρέφει (tenantId, sessionId).
     private async Task<(Guid TenantId, Guid SessionId)> SeedSessionAsync(int capacity, DateTime startsAtUtc, int bookedCount = 0, int durationMinutes = 60)
     {
         var tenantId = Guid.NewGuid();

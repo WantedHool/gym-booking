@@ -37,8 +37,6 @@ export class StaffShell {
 
   protected readonly isAdmin = computed(() => this.authService.hasRole('Admin'));
 
-  // Ανοιχτό by default (και σε desktop και σε mobile)· κλείνει αυτόματα όταν περνάμε σε στενή
-  // οθόνη, ο χρήστης μπορεί να το toggle-άρει χειροκίνητα ανά πάσα στιγμή (και στα δύο).
   protected readonly sidenavOpen = signal(true);
   private readonly resetSidenavOnBreakpointChange = effect(() => {
     this.sidenavOpen.set(!this.isNarrow());

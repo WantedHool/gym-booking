@@ -70,9 +70,6 @@ export class Schedule {
     return d;
   });
 
-  // Ίδια κριτήρια χρησιμότητας με το backend gate (WaitlistService/BookingService):
-  // εντός ισχύος + (unlimited ή απομένουν προπονήσεις). Το /subscriptions/me μπορεί να
-  // επιστρέψει active-status συνδρομή που όμως έχει λήξει ή εξαντληθεί, γι' αυτό δεν αρκεί ο έλεγχος != null.
   protected readonly hasSubscription = computed(() => {
     const s = this.subscription();
     if (!s) {

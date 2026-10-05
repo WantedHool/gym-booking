@@ -42,7 +42,6 @@ export class RosterView {
 
   constructor() {
     this.load();
-    // Για walk-in: μόνο ενεργοί πελάτες (role 'User') του tenant.
     this.userApi.getAll().subscribe({
       next: (u) => this.customers.set(u.filter((x) => x.roles.includes('User') && x.isActive)),
       error: () => void 0,

@@ -5,9 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GymBooking.Data;
 
-/// <summary>
-/// Η κεντρική "πύλη" προς τη βάση. Identity (users/roles) + tenant-owned entities.
-/// </summary>
 public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {
     private readonly ICurrentTenant _currentTenant;
@@ -40,13 +37,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, 
         modelBuilder.Entity<Subscription>().HasQueryFilter(s => s.TenantId == _currentTenant.TenantId);
         modelBuilder.Entity<WaitlistEntry>().HasQueryFilter(w => w.TenantId == _currentTenant.TenantId);
 
-        // DB-level δικλείδα ασφαλείας ενάντια σε διπλή confirmed κράτηση (πέρα από τον έλεγχο στο service).
         modelBuilder.Entity<Booking>()
             .HasIndex(b => new { b.UserId, b.ClassSessionId })
             .IsUnique()
             .HasFilter("\"Status\" = 0");
 
-        // Ένας χρήστης δεν μπορεί να είναι δύο φορές σε Waiting για το ίδιο session.
         modelBuilder.Entity<WaitlistEntry>()
             .HasIndex(w => new { w.UserId, w.ClassSessionId })
             .IsUnique()

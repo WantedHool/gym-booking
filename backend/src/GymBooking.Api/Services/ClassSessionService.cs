@@ -8,9 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GymBooking.Api.Services;
 
-/// <summary>
-/// Αποτέλεσμα δημιουργίας session: είτε το έτοιμο response, είτε μήνυμα σφάλματος (validation).
-/// </summary>
 public record SessionCreateResult(ClassSessionResponse? Response, string? Error)
 {
     public static SessionCreateResult Ok(ClassSessionResponse response)
@@ -40,10 +37,6 @@ public class ClassSessionService
         _userManager = userManager;
     }
 
-    /// <summary>
-    /// Δημιουργεί session αφού επικυρώσει: θετική χωρητικότητα/διάρκεια, μελλοντική έναρξη,
-    /// ενεργό ClassType (ίδιο tenant), και instructor που υπάρχει στο tenant με ρόλο Instructor ή Admin.
-    /// </summary>
     public async Task<SessionCreateResult> CreateAsync(Guid classTypeId, Guid instructorId, DateTime startsAtUtc, int durationMinutes, int capacity)
     {
         if (capacity <= 0)
@@ -61,15 +54,12 @@ public class ClassSessionService
             return SessionCreateResult.Invalid("StartsAt must be in the future.");
         }
 
-        // Το query filter περιορίζει το ClassType στο τρέχον tenant.
         var classType = await _dbContext.ClassTypes.FirstOrDefaultAsync(c => c.Id == classTypeId && c.IsActive);
         if (classType is null)
         {
             return SessionCreateResult.Invalid("Invalid or inactive class type.");
         }
 
-        // FindByIdAsync περνά από το ίδιο DbContext → το tenant query filter ισχύει
-        // (instructor άλλου tenant → null).
         var instructor = await _userManager.FindByIdAsync(instructorId.ToString());
         if (instructor is null)
         {
@@ -99,7 +89,6 @@ public class ClassSessionService
         _dbContext.ClassSessions.Add(session);
         await _dbContext.SaveChangesAsync();
 
-        // Χτίζουμε το response από δεδομένα που ήδη έχουμε στο χέρι — χωρίς δεύτερο round-trip.
         var response = new ClassSessionResponse(
             session.Id,
             session.ClassTypeId,

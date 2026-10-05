@@ -21,8 +21,6 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet restore
       - run: dotnet build --no-restore -c Release
-      # tests: προστίθενται στη Φ1/Φ3 (xUnit + Testcontainers)
-      # - run: dotnet test --no-build -c Release
 
   frontend:
     name: Frontend (Nx / Angular)
@@ -40,4 +38,3 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npx nx run-many -t lint build
-      # test: προστίθεται όταν υπάρχουν πραγματικά FE tests (Φ1+)

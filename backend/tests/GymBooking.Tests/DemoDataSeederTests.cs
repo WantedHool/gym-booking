@@ -23,7 +23,7 @@ public class DemoDataSeederTests : IClassFixture<TestApiFactory>
         var seeder = scope.ServiceProvider.GetRequiredService<DemoDataSeeder>();
 
         await seeder.SeedAsync();
-        await seeder.SeedAsync(); // δεύτερη φορά — δεν πρέπει να διπλασιάσει
+        await seeder.SeedAsync();
 
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var classTypeCount = await dbContext.ClassTypes.IgnoreQueryFilters().CountAsync();
@@ -32,7 +32,6 @@ public class DemoDataSeederTests : IClassFixture<TestApiFactory>
         Assert.True(classTypeCount >= 2, $"Expected >= 2 class types, got {classTypeCount}");
         Assert.True(sessionCount >= 3, $"Expected >= 3 sessions, got {sessionCount}");
 
-        // Idempotent: όλα τα sessions είναι μελλοντικά (ώστε να φαίνονται στο πρόγραμμα).
         var allFuture = await dbContext.ClassSessions.IgnoreQueryFilters()
             .AllAsync(s => s.StartsAt > DateTime.UtcNow);
         Assert.True(allFuture);

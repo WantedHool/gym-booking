@@ -73,7 +73,7 @@ public class ScheduleTests
 
         var result = await GetScheduleAsync(seeded.TenantId, userId, weekStart, weekStart.AddDays(7));
 
-        Assert.Single(result); // το session της επόμενης εβδομάδας εξαιρείται
+        Assert.Single(result);
         Assert.Equal(seeded.SessionThisWeek, result[0].Id);
         Assert.True(result[0].IsBookedByMe);
         Assert.NotNull(result[0].MyBookingId);

@@ -14,9 +14,8 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
+          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '^.*/proxy\\.shared(\\.js)?$'],
           depConstraints: [
-            // --- scope: ποιος βλέπει ποιον (απομόνωση customer/staff) ---
             {
               sourceTag: 'scope:customer',
               onlyDependOnLibsWithTags: ['scope:customer', 'scope:shared'],
@@ -26,11 +25,9 @@ export default [
               onlyDependOnLibsWithTags: ['scope:staff', 'scope:shared'],
             },
             {
-              // shared libs δεν επιτρέπεται να εξαρτώνται από app-specific κώδικα
               sourceTag: 'scope:shared',
               onlyDependOnLibsWithTags: ['scope:shared'],
             },
-            // --- type: στρώματα αρχιτεκτονικής (ποιο layer βλέπει ποιο) ---
             {
               sourceTag: 'type:app',
               onlyDependOnLibsWithTags: [
@@ -77,7 +74,6 @@ export default [
       '**/*.cjs',
       '**/*.mjs',
     ],
-    // Override or add rules here
     rules: {},
   },
 ];

@@ -38,7 +38,6 @@ public class ClassSessionsController : ControllerBase
         var currentUserId = Guid.Parse(User.FindFirst("sub")!.Value);
         var isAdmin = User.IsInRole(Roles.Admin);
 
-        // Instructor → πάντα ο εαυτός του. Admin → ό,τι έδωσε (ή ο εαυτός του αν δεν έδωσε).
         var instructorId = isAdmin && request.InstructorId.HasValue
             ? request.InstructorId.Value
             : currentUserId;

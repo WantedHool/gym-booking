@@ -14,8 +14,6 @@ export class SessionCard {
   readonly session = input.required<ScheduleSession>();
   readonly dateFormat = input(CUSTOMER_DATE_FORMATS.session);
   readonly waitlistPosition = input<number | null>(null);
-  // false → κρύβει «Κράτηση» & «Λίστα αναμονής» (χωρίς ενεργή συνδρομή δεν έχει νόημα).
-  // Τα «Ακύρωση»/«Έξοδος» μένουν πάντα ορατά ώστε ο χρήστης να αναιρεί δεσμεύσεις.
   readonly canBook = input(true);
 
   readonly bookSession = output<ScheduleSession>();

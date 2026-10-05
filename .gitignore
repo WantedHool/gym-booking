@@ -19,13 +19,15 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Claude Code local config
-.claude/
-
 # Serilog file sink output
 backend/src/GymBooking.Api/logs/
 
-# Docs — generated HTML (source of truth = .md)
-docs/*.html
-
+# Local working notes and tooling (not part of the delivery)
+CLAUDE.md
+.claude/
 .superpowers/
+docs/*
+!docs/thema_ptyxiakhs.pdf
+
+# Office lock files
+~$*

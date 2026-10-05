@@ -45,8 +45,6 @@ public class WaitlistService
             return WaitlistOutcome.AlreadyOnWaitlist;
         }
 
-        // Ίδια απαίτηση με την κράτηση: χωρίς ενεργή/χρήσιμη συνδρομή δεν προωθείσαι ποτέ από τη λίστα
-        // (το auto-promote στο BookingService τον κόβει), άρα μπλοκάρουμε ήδη στην είσοδο.
         if (!await HasUsableSubscriptionAsync(userId))
         {
             return WaitlistOutcome.NoSubscription;
@@ -65,9 +63,6 @@ public class WaitlistService
         return WaitlistOutcome.Joined;
     }
 
-    // Read-only έλεγχος (ΔΕΝ καταναλώνει θέση) — ίδια κριτήρια χρησιμότητας με το
-    // BookingService.TryConsumeSubscriptionAsync: active + εντός ισχύος + διαθέσιμες θέσεις.
-    // TenantId φιλτράρεται αυτόματα από το global query filter.
     private async Task<bool> HasUsableSubscriptionAsync(Guid userId)
     {
         var now = DateTime.UtcNow;
@@ -105,7 +100,6 @@ public class WaitlistService
         var result = new List<WaitlistEntryResponse>();
         foreach (var m in mine)
         {
-            // Θέση = πόσοι Waiting μπήκαν νωρίτερα στο ίδιο session, +1 (computed — κανένα stored Position).
             var earlier = await _dbContext.WaitlistEntries
                 .CountAsync(w => w.ClassSessionId == m.ClassSessionId
                     && w.Status == WaitlistStatus.Waiting

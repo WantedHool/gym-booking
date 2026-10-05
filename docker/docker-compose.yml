@@ -10,7 +10,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - gym-postgres-data:/var/lib/postgresql/data # persist data
+      - gym-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gym -d gymbooking"]
       interval: 10s
@@ -22,8 +22,8 @@ services:
     container_name: gym-papercut
     restart: unless-stopped
     ports:
-      - "2525:2525" # SMTP — εδώ θα "στέλνει" emails το API (η image ακούει εσωτερικά στο 2525, όχι στο 25)
-      - "8080:8080" # Web UI — βλέπεις τα emails στο http://localhost:8080 (η image ακούει εσωτερικά στο 8080, όχι στο 80)
+      - "2525:2525"
+      - "8080:8080"
 
 volumes:
   gym-postgres-data:

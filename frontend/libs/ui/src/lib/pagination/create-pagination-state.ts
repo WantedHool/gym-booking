@@ -12,7 +12,6 @@ import {
   PAGE_SIZE_OPTIONS,
 } from '../pagination/pagination';
 
-/** Client-side pagination state for signal-based lists. Must run in an injection context. */
 export function createPaginationState<T>(items: () => readonly T[], options?: PaginationStateOptions) {
   const breakpointObserver = inject(BreakpointObserver);
   const destroyRef = inject(DestroyRef);

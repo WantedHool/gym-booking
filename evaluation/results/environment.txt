@@ -1,0 +1,8 @@
+date_utc=2026-09-29 17:29:40Z
+os=Microsoft Windows 10.0.26200
+cpu=Intel64 Family 6 Model 197 Stepping 2, GenuineIntel
+logical_cores=16
+memory_available_gb=31.4
+runtime=.NET 10.0.12
+database=postgres:16-alpine (Testcontainers, Docker Desktop), max_connections=300
+api=in-process (WebApplicationFactory / TestServer), environment=Testing

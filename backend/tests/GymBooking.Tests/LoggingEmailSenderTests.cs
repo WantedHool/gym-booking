@@ -10,7 +10,6 @@ public class LoggingEmailSenderTests
     {
         var sender = new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance);
 
-        // Δεν πρέπει να ρίξει — απλώς κάνει log (καμία δικτυακή σύνδεση).
         await sender.SendAsync("to@demo.gym", "Subject", "Body with token=abc123");
     }
 }

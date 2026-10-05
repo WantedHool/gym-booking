@@ -79,7 +79,7 @@ public class WaitlistEndpointsTests
         db.ClassTypes.Add(ct);
         db.ClassSessions.Add(s);
         await db.SaveChangesAsync();
-        await scope.ServiceProvider.GetRequiredService<GymBooking.Api.Services.BookingService>().BookAsync(fillerId, s.Id); // γεμίζει
+        await scope.ServiceProvider.GetRequiredService<GymBooking.Api.Services.BookingService>().BookAsync(fillerId, s.Id);
         return s.Id;
     }
 

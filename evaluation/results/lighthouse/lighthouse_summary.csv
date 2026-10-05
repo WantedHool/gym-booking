@@ -1,0 +1,9 @@
+app,page,form_factor,accessibility_score,failed_audits
+customer,login,mobile,100,
+customer,dashboard,mobile,100,
+customer,schedule,mobile,100,
+customer,history,mobile,100,
+staff,login,desktop,94,color-contrast
+staff,dashboard,desktop,95,color-contrast
+staff,sessions,desktop,95,color-contrast
+staff,users,desktop,95,color-contrast

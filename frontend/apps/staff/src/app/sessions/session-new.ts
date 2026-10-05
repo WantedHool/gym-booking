@@ -8,8 +8,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTimepickerModule } from '@angular/material/timepicker';
 import { Router } from '@angular/router';
-import { ClassSessionApiService, ClassTypeApiService } from '@frontend/data-access';
-import { ClassType } from '@frontend/models';
+import { AuthService } from '@frontend/auth';
+import { ClassSessionApiService, ClassTypeApiService, InstructorApiService } from '@frontend/data-access';
+import { ClassType, Instructor } from '@frontend/models';
 import { PageHeader } from '@frontend/ui';
 
 @Component({
@@ -32,16 +33,21 @@ export class SessionNew {
   private readonly fb = inject(FormBuilder);
   private readonly sessionApi = inject(ClassSessionApiService);
   private readonly classTypeApi = inject(ClassTypeApiService);
+  private readonly instructorApi = inject(InstructorApiService);
+  private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
+  protected readonly isAdmin = this.authService.hasRole('Admin');
   protected readonly classTypes = signal<ClassType[]>([]);
+  protected readonly instructors = signal<Instructor[]>([]);
   protected readonly submitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected readonly form = this.fb.nonNullable.group({
     classTypeId: ['', Validators.required],
+    instructorId: [''],
     startsDate: this.fb.control<Date | null>(null, Validators.required),
-    startsTime: this.fb.control<Date | null>(null, Validators.required), // ώρα (τοπική) → συνδυάζεται με startsDate στο submit
+    startsTime: this.fb.control<Date | null>(null, Validators.required),
     durationMinutes: [60, [Validators.required, Validators.min(1)]],
     capacity: [10, [Validators.required, Validators.min(1)]],
   });
@@ -51,6 +57,12 @@ export class SessionNew {
       next: (items) => this.classTypes.set(items),
       error: () => this.errorMessage.set('Αποτυχία φόρτωσης ειδών μαθημάτων.'),
     });
+    if (this.isAdmin) {
+      this.instructorApi.getAll().subscribe({
+        next: (items) => this.instructors.set(items),
+        error: () => this.errorMessage.set('Αποτυχία φόρτωσης προπονητών.'),
+      });
+    }
   }
 
   submit(): void {
@@ -66,7 +78,7 @@ export class SessionNew {
     this.sessionApi
       .create({
         classTypeId: raw.classTypeId,
-        // instructorId παραλείπεται → το backend βάζει τον τρέχοντα instructor.
+        instructorId: raw.instructorId || undefined,
         startsAt: startsAt.toISOString(),
         durationMinutes: raw.durationMinutes,
         capacity: raw.capacity,

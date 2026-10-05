@@ -2,8 +2,6 @@ using GymBooking.Api.Interfaces;
 
 namespace GymBooking.Api.Utilities;
 
-// Production-safe: δεν στέλνει πραγματικό email — καταγράφει το μήνυμα στο log. Χρησιμοποιείται
-// στο deployed demo (δεν υπάρχει SMTP· ο admin παίρνει το invite link μέσα από το staff UI).
 public class LoggingEmailSender : IEmailSender
 {
     private readonly ILogger<LoggingEmailSender> _logger;

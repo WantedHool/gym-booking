@@ -90,7 +90,7 @@ public class BookingSubscriptionTests
         Assert.Equal(2, await TestData.GetRemainingAsync(_factory.Services, tenantId, userId));
 
         await CancelAsync(tenantId, userId, booking!.Id);
-        Assert.Equal(3, await TestData.GetRemainingAsync(_factory.Services, tenantId, userId)); // refund
+        Assert.Equal(3, await TestData.GetRemainingAsync(_factory.Services, tenantId, userId));
     }
 
     [Fact]

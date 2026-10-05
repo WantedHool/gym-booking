@@ -81,7 +81,6 @@ body {
   height: 100%;
 }
 
-// Πιο στρογγυλά, "γλυκά" κουμπιά + λίγο style στα inputs
 .mat-mdc-unelevated-button,
 .mat-mdc-raised-button,
 .mat-mdc-outlined-button,
@@ -106,7 +105,6 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-// Sidebar nav — ξεχωρίζει από το περιεχόμενο (η default Material surface color νικάει την Tailwind utility class χωρίς !important)
 .mat-sidenav.mat-drawer {
   background-color: var(--app-bg-nav) !important;
 }
@@ -115,8 +113,6 @@ body {
   padding: 0.5rem !important;
 }
 
-// Κενό ανάμεσα στα (pill-shaped) items αντί για διαχωριστική γραμμή — μια border-bottom
-// θα έκοβε άσχημα στις στρογγυλεμένες άκρες.
 .mat-mdc-nav-list .mat-mdc-list-item {
   margin-bottom: 4px;
 }

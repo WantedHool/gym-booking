@@ -43,7 +43,7 @@ export interface ClassSession {
   classTypeName: string;
   instructorId: string;
   instructorName: string;
-  startsAt: string; // ISO UTC
+  startsAt: string;
   durationMinutes: number;
   capacity: number;
   bookedCount: number;
@@ -53,7 +53,7 @@ export interface ClassSession {
 export interface CreateClassSessionRequest {
   classTypeId: string;
   instructorId?: string | null;
-  startsAt: string; // ISO UTC
+  startsAt: string;
   durationMinutes: number;
   capacity: number;
 }
@@ -62,8 +62,8 @@ export interface Booking {
   id: string;
   classSessionId: string;
   classTypeName: string;
-  startsAt: string; // ISO UTC
-  status: string;   // 'Confirmed' | 'Cancelled'
+  startsAt: string;
+  status: string;
   createdAt: string;
 }
 
@@ -86,7 +86,7 @@ export interface ScheduleSession {
   classTypeName: string;
   instructorId: string;
   instructorName: string;
-  startsAt: string; // ISO UTC
+  startsAt: string;
   durationMinutes: number;
   capacity: number;
   bookedCount: number;
@@ -97,7 +97,7 @@ export interface ScheduleSession {
 export interface WaitlistEntry {
   classSessionId: string;
   classTypeName: string;
-  startsAt: string; // ISO UTC
+  startsAt: string;
   position: number;
 }
 
@@ -107,8 +107,8 @@ export interface Instructor {
 }
 
 export interface ScheduleQuery {
-  from: string; // ISO UTC
-  to: string;   // ISO UTC
+  from: string;
+  to: string;
   classTypeId?: string;
   instructorId?: string;
 }

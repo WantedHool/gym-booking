@@ -4,8 +4,6 @@ using GymBooking.Core.Options;
 
 namespace GymBooking.Api.Utilities;
 
-// Dev-only: στέλνει μέσω SMTP στο τοπικό Papercut (docker/docker-compose.yml) — τα emails
-// φαίνονται στο http://localhost:8080, δεν φεύγουν πραγματικά πουθενά.
 public class SmtpEmailSender : IEmailSender
 {
     private readonly EmailOptions _options;

@@ -20,11 +20,6 @@ public class BookingService
 
     public async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid userId, Guid classSessionId)
     {
-        // Το Program.cs ενεργοποιεί EnableRetryOnFailure στο Npgsql provider (retry σε παροδικά
-        // connection errors). Όταν υπάρχει retrying execution strategy, η EF Core ΑΠΑΓΟΡΕΥΕΙ
-        // χειροκίνητο Database.BeginTransactionAsync() εκτός αν όλο το transaction τρέχει μέσα
-        // στο strategy.ExecuteAsync — αλλιώς ρίχνει InvalidOperationException at runtime
-        // (δεν το πιάνει το InMemory/no-retry test harness, μόνο πραγματικό Postgres+retry config).
         var strategy = _dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync<(BookingOutcome Outcome, Booking? Booking)>(async () =>
         {
@@ -32,7 +27,6 @@ public class BookingService
 
             await using var tx = await _dbContext.Database.BeginTransactionAsync();
 
-            // Κλειδώνει τη ΣΕΙΡΑ του session μέχρι το COMMIT — no overbooking σε ταυτόχρονες κρατήσεις.
             var session = await _dbContext.ClassSessions
                 .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {classSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
                 .IgnoreQueryFilters()
@@ -83,7 +77,7 @@ public class BookingService
                 SubscriptionId = subscriptionId,
             };
             _dbContext.Bookings.Add(booking);
-            session.BookedCount += 1; // ΤΟ ΜΟΝΑΔΙΚΟ σημείο αλλαγής του BookedCount (book)
+            session.BookedCount += 1;
 
             await _dbContext.SaveChangesAsync();
             await tx.CommitAsync();
@@ -92,7 +86,6 @@ public class BookingService
         });
     }
 
-    // Staff walk-in: ίδια atomic ροή με το self-service BookAsync· ο userId έρχεται από τον staff.
     public async Task<(BookingOutcome Outcome, Booking? Booking)> BookForAsync(Guid userId, Guid classSessionId)
     {
         return await BookAsync(userId, classSessionId);
@@ -103,7 +96,6 @@ public class BookingService
         return await CancelCoreAsync(bookingId, ownerUserId: userId, enforceWindow: true);
     }
 
-    // Staff: καμία ιδιοκτησία, καμία πολιτική παραθύρου.
     public async Task<(BookingOutcome Outcome, Booking? Booking)> CancelByStaffAsync(Guid bookingId)
     {
         return await CancelCoreAsync(bookingId, ownerUserId: null, enforceWindow: false);
@@ -125,12 +117,12 @@ public class BookingService
             }
             if (ownerUserId is Guid oid && booking.UserId != oid)
             {
-                return (BookingOutcome.SessionNotFound, null); // ownership: μη-δική-σου → σαν να μην υπάρχει
+                return (BookingOutcome.SessionNotFound, null);
             }
 
             if (booking.Status == BookingStatus.Cancelled)
             {
-                return (BookingOutcome.Success, booking); // idempotent
+                return (BookingOutcome.Success, booking);
             }
 
             var session = await _dbContext.ClassSessions
@@ -139,7 +131,6 @@ public class BookingService
                 .AsTracking()
                 .FirstOrDefaultAsync();
 
-            // Φ6: πολιτική ακύρωσης — block αν είμαστε πολύ κοντά στην ώρα του μαθήματος.
             if (enforceWindow && session is not null)
             {
                 var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId);
@@ -155,10 +146,9 @@ public class BookingService
 
             if (session is not null && session.BookedCount > 0)
             {
-                session.BookedCount -= 1; // επιστροφή θέσης
+                session.BookedCount -= 1;
             }
 
-            // Φ5: refund θέσης προπόνησης στη συνδρομή που καταναλώθηκε (SessionPack μόνο).
             if (booking.SubscriptionId is Guid subId)
             {
                 var subscription = await _dbContext.Subscriptions
@@ -172,7 +162,6 @@ public class BookingService
                 }
             }
 
-            // --- Φ6: auto-promote επόμενου έγκυρου της λίστας αναμονής (μέσα στο ίδιο tx) ---
             if (session is not null && session.BookedCount < session.Capacity)
             {
                 var waiting = await _dbContext.WaitlistEntries
@@ -213,12 +202,11 @@ public class BookingService
                         CreatedAt = DateTime.UtcNow,
                         SubscriptionId = entrySubscriptionId,
                     });
-                    session.BookedCount += 1; // επιστροφή θέσης → προωθημένος
+                    session.BookedCount += 1;
                     entry.Status = WaitlistStatus.Promoted;
                     break;
                 }
             }
-            // --- τέλος auto-promote ---
 
             await _dbContext.SaveChangesAsync();
             await tx.CommitAsync();
@@ -281,7 +269,6 @@ public class BookingService
             .ToListAsync();
     }
 
-    // Χρονική επικάλυψη με άλλη confirmed κράτηση του χρήστη (τα confirmed sessions είναι λίγα → in-memory).
     private async Task<bool> HasTimeConflictAsync(Guid userId, ClassSession session)
     {
         var newStart = session.StartsAt;
@@ -295,7 +282,6 @@ public class BookingService
         return userSessions.Any(x => x.StartsAt < newEnd && newStart < x.StartsAt.AddMinutes(x.DurationMinutes));
     }
 
-    // Κλειδώνει (FOR UPDATE) & καταναλώνει τη μοναδική active συνδρομή· επιστρέφει αν είναι χρήσιμη + το Id της.
     private async Task<(bool Usable, Guid? SubscriptionId)> TryConsumeSubscriptionAsync(Guid userId, Guid tenantId)
     {
         var subscription = await _dbContext.Subscriptions

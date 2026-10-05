@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "Αν χρησιμοποιήσετε αυτό το λογισμικό, παρακαλούμε να το αναφέρετε όπως παρακάτω."
+type: software
+title: "GymBooking: Εφαρμογή Διαχείρισης Κρατήσεων και Προγραμμάτων Γυμναστηρίου"
+abstract: >-
+  Πολυμισθωτική (multi-tenant) διαδικτυακή εφαρμογή για κρατήσεις μαθημάτων
+  γυμναστηρίου, με ατομικές κρατήσεις υπό ταυτοχρονισμό, λίστα αναμονής,
+  συνδρομές και ξεχωριστές εφαρμογές για μέλη και προσωπικό. Πτυχιακή εργασία,
+  Τμήμα Πληροφορικής, Πανεπιστήμιο Πειραιώς.
+authors:
+  - family-names: Rimpas
+    given-names: Christos
+    affiliation: "Τμήμα Πληροφορικής, Πανεπιστήμιο Πειραιώς"
+version: 1.0.0
+date-released: 2026-09-29
+license: MIT
+repository-code: "https://github.com/WantedHool/gym-booking"
+keywords:
+  - booking management
+  - multi-tenancy
+  - concurrency control
+  - web application
+  - ASP.NET Core
+  - Angular

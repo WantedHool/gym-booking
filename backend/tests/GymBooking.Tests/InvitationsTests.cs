@@ -129,7 +129,6 @@ public class InvitationsTests : IClassFixture<TestApiFactory>
         Assert.NotNull(body);
         Assert.Contains("token=", body!.RegisterLink);
 
-        // Το email εξακολουθεί να «στέλνεται» (dev: Papercut) — ο FakeEmailSender το καταγράφει.
         var emailSender = _factory.Services.GetRequiredService<FakeEmailSender>();
         Assert.Contains(emailSender.SentEmails, e => e.To == "invitee3@demo.gym" && e.Body.Contains("token="));
     }
@@ -165,7 +164,6 @@ public class InvitationsTests : IClassFixture<TestApiFactory>
         Assert.Equal(UserStatus.Active, createdUser.Status);
         Assert.Contains(Roles.User, await userManager.GetRolesAsync(createdUser));
 
-        // Και το ίδιο invitation δεν μπορεί να ξαναχρησιμοποιηθεί.
         var secondAttempt = await anonymousClient.PostAsJsonAsync(
             $"/auth/register?token={rawToken}",
             new RegisterRequest("Whatever1234!", "X", "Y"));

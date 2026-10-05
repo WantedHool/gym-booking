@@ -16,7 +16,6 @@ public enum UserOutcome
     InvalidRole,
 }
 
-// Λεπτό abstraction πάνω από το UserManager ώστε το UserService να είναι unit-testable χωρίς Identity stack.
 public interface IRoleReaderWriter
 {
     Task<IList<string>> GetRolesAsync(ApplicationUser user);
@@ -82,7 +81,7 @@ public class UserService
         }
         if (actingUserId == targetUserId)
         {
-            return UserOutcome.CannotModifySelf; // no self-demote (μη μείνει tenant χωρίς admin)
+            return UserOutcome.CannotModifySelf;
         }
 
         var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == targetUserId);
@@ -99,7 +98,7 @@ public class UserService
     {
         if (actingUserId == targetUserId)
         {
-            return UserOutcome.CannotModifySelf; // no self-deactivate
+            return UserOutcome.CannotModifySelf;
         }
 
         var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == targetUserId);

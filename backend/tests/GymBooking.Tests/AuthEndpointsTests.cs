@@ -104,7 +104,6 @@ public class AuthEndpointsTests : IClassFixture<TestApiFactory>
         await CreateUserAsync("login-lockout@demo.gym", "Test1234!");
         var client = _factory.CreateClient();
 
-        // Οι πρώτες τέσσερις αποτυχίες με λάθος password → 401 (κάτω από το όριο των 5).
         for (var attempt = 0; attempt < 4; attempt++)
         {
             var failed = await client.PostAsJsonAsync(
@@ -112,12 +111,10 @@ public class AuthEndpointsTests : IClassFixture<TestApiFactory>
             Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
         }
 
-        // Η πέμπτη αποτυχία φτάνει το όριο (MaxFailedAccessAttempts = 5) → το ίδιο request κλειδώνει → 423.
         var tripsLockout = await client.PostAsJsonAsync(
             "/auth/login", new LoginRequest("login-lockout@demo.gym", "WrongPassword1!"));
         Assert.Equal(HttpStatusCode.Locked, tripsLockout.StatusCode);
 
-        // Και με ΣΩΣΤΟ password πλέον ο λογαριασμός παραμένει κλειδωμένος → 423.
         var stillLocked = await client.PostAsJsonAsync(
             "/auth/login", new LoginRequest("login-lockout@demo.gym", "Test1234!"));
         Assert.Equal(HttpStatusCode.Locked, stillLocked.StatusCode);

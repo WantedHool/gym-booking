@@ -44,9 +44,6 @@ export class Login {
       error: (error: HttpErrorResponse) => {
         this.submitting.set(false);
 
-        // 429: rate-limited από το API (πολλές προσπάθειες ανά IP). 423: ο λογαριασμός κλειδώθηκε
-        // (πολλές αποτυχίες password). Και στις δύο δεν πρόκειται για λάθος credentials → ξεχωριστό
-        // μήνυμα, χωρίς να μαρκάρουμε τα πεδία ως invalid.
         if (error.status === 429) {
           this.errorMessage.set('Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά σε λίγο.');
           return;

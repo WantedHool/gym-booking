@@ -33,7 +33,7 @@ public class AdditionalTenantSeedTests : IClassFixture<TestApiFactory>
         };
 
         await seeder.SeedAdditionalTenantAsync(seed);
-        await seeder.SeedAdditionalTenantAsync(seed); // idempotent
+        await seeder.SeedAdditionalTenantAsync(seed);
 
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var tenants = await dbContext.Tenants.IgnoreQueryFilters()
@@ -45,7 +45,6 @@ public class AdditionalTenantSeedTests : IClassFixture<TestApiFactory>
             .SingleAsync(u => u.NormalizedEmail == "ADMIN2@TEST.GYM");
         Assert.Equal(tenants[0].Id, admin.TenantId);
         Assert.Contains(Roles.Admin, await userManager.GetRolesAsync(admin));
-        // Έγκυρο Identity hash → το password επαληθεύεται.
         Assert.True(await userManager.CheckPasswordAsync(admin, "Admin1234!"));
     }
 }

@@ -108,8 +108,6 @@ public class BookingEndpointsTests
         await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, user.Id);
         await TestData.GiveUnlimitedAsync(_factory.Services, user.TenantId, other.Id);
 
-        // Ο "other" πρέπει να είναι στο ΙΔΙΟ tenant για να δει το session — απλούστερο: γέμισε το session
-        // απευθείας μέσω του service σε scope του tenant.
         using (var scope = _factory.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(user.TenantId);

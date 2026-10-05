@@ -7,8 +7,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GymBooking.Api.Utilities;
 
-// Τρέχει μετά τον DbSeeder. Γεμίζει το demo tenant με ρεαλιστικά δεδομένα ώστε ένας tester
-// να βλέπει αμέσως γεμάτο app. Idempotent: guard στα ClassTypes.
 public class DemoDataSeeder
 {
     private readonly AppDbContext _dbContext;
@@ -25,16 +23,14 @@ public class DemoDataSeeder
         var tenant = await _dbContext.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync();
         if (tenant is null)
         {
-            return; // δεν υπάρχει tenant — ο DbSeeder δεν έχει τρέξει
+            return;
         }
 
-        // Idempotent guard: αν υπάρχουν ήδη class types, μην ξανασπείρεις.
         if (await _dbContext.ClassTypes.IgnoreQueryFilters().AnyAsync())
         {
             return;
         }
 
-        // 1) Class types
         var yoga = new ClassType
         {
             Id = Guid.NewGuid(),
@@ -57,12 +53,9 @@ public class DemoDataSeeder
         };
         _dbContext.ClassTypes.AddRange(yoga, crossfit);
 
-        // 2) Instructors
         var instructor1 = await CreateUserAsync("instructor@demo.gym", "Γιώργος", "Παπαδόπουλος", tenant.Id, Roles.Instructor);
         var instructor2 = await CreateUserAsync("instructor2@demo.gym", "Ελένη", "Νικολάου", tenant.Id, Roles.Instructor);
 
-        // 3) Class sessions (μελλοντικά· ένα session με capacity=1 ώστε να γεμίζει με 1 booking
-        // και να έχει νόημα το waitlist entry).
         var sessionYoga1 = new ClassSession
         {
             Id = Guid.NewGuid(),
@@ -113,7 +106,6 @@ public class DemoDataSeeder
         };
         _dbContext.ClassSessions.AddRange(sessionYoga1, sessionCrossfit1, sessionYoga2, sessionCrossfit2);
 
-        // 4) Membership plans
         var unlimitedPlan = new MembershipPlan
         {
             Id = Guid.NewGuid(),
@@ -138,7 +130,6 @@ public class DemoDataSeeder
         };
         _dbContext.MembershipPlans.AddRange(unlimitedPlan, sessionPackPlan);
 
-        // 5) Members + subscriptions
         var member1 = await CreateUserAsync("member@demo.gym", "Μαρία", "Ιωάννου", tenant.Id, Roles.User);
         var member2 = await CreateUserAsync("member2@demo.gym", "Νίκος", "Δημητρίου", tenant.Id, Roles.User);
         var member3 = await CreateUserAsync("member3@demo.gym", "Άννα", "Κωνσταντίνου", tenant.Id, Roles.User);
@@ -179,7 +170,6 @@ public class DemoDataSeeder
         };
         _dbContext.Subscriptions.AddRange(subscriptionMember1, subscriptionMember2, subscriptionMember3);
 
-        // 6) 1 booking (γεμίζει το sessionCrossfit1 — capacity 1) + 1 waitlist entry (member2 περιμένει)
         var booking = new Booking
         {
             Id = Guid.NewGuid(),

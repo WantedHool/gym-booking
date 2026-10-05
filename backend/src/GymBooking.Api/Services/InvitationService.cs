@@ -71,7 +71,6 @@ public class InvitationService
     {
         var tokenHash = HashToken(rawToken);
 
-        // Δεν ξέρουμε ακόμα το tenant του invitation — ίδιο σκεπτικό με το login (AuthController).
         var invitation = await _dbContext.Invitations
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(i => i.TokenHash == tokenHash);

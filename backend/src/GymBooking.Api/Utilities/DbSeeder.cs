@@ -28,7 +28,6 @@ public class DbSeeder
 
     public async Task SeedAsync()
     {
-        // Tenant δεν έχει query filter, άρα αυτό το check είναι αξιόπιστο ανεξαρτήτως CurrentTenant.
         if (await _dbContext.Tenants.AnyAsync())
         {
             return;
@@ -53,9 +52,6 @@ public class DbSeeder
             }
         }
 
-        // Η βάση ήταν άδεια (κανένα Tenant) πριν το SaveChangesAsync παραπάνω, άρα δεν υπάρχει
-        // κανένας άλλος χρήστης — δεν χρειάζεται CurrentTenant.SetTenant εδώ (δες AuthController
-        // για το ίδιο σκεπτικό όταν ΔΕΝ είναι εγγυημένα άδεια η βάση).
         var admin = new ApplicationUser
         {
             Id = Guid.NewGuid(),
@@ -67,9 +63,6 @@ public class DbSeeder
             EmailConfirmed = true,
         };
 
-        // Αν κάτι παρακάτω αποτύχει, διαγράφουμε το Tenant — αλλιώς το Tenants.AnyAsync() guard
-        // παραπάνω θα θεωρούσε τη βάση "ήδη σπαρμένη" σε κάθε επόμενο restart, χωρίς ποτέ να
-        // υπάρχει πραγματικός admin (μόνιμο, μη ανακτήσιμο dead-end χωρίς αυτό).
         var result = await _userManager.CreateAsync(admin, _options.AdminPassword);
         if (!result.Succeeded)
         {
@@ -90,8 +83,6 @@ public class DbSeeder
         }
     }
 
-    // On-demand: δημιουργεί επιπλέον tenant + admin (για προσωπικά tests). Idempotent σε slug.
-    // Ο admin δημιουργείται μέσω UserManager (έγκυρο Identity hash), όπως ο πρώτος.
     public async Task SeedAdditionalTenantAsync(AdditionalTenantSeed seed)
     {
         if (string.IsNullOrWhiteSpace(seed.TenantSlug))

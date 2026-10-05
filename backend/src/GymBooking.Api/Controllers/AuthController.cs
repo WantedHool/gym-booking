@@ -39,10 +39,6 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request)
     {
-        // Δεν ξέρουμε ακόμα το tenant του χρήστη — το CurrentTenant είναι Guid.Empty σε αυτό το
-        // σημείο, άρα το query filter του AppDbContext θα έκρυβε ΚΑΘΕ χρήστη. Το IgnoreQueryFilters
-        // εδώ είναι σκόπιμο: το email είναι global unique (shared UserNameIndex), άρα το lookup
-        // είναι ασφαλές χωρίς tenant scope.
         var normalizedEmail = _userManager.NormalizeEmail(request.Email);
         var user = await _userManager.Users
             .IgnoreQueryFilters()
@@ -58,17 +54,12 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        // Μόλις βρεθεί ο χρήστης, ξέρουμε το tenant του — από εδώ και πέρα στο ίδιο request
-        // (π.χ. UserManager.GetRolesAsync) το query filter δουλεύει σωστά.
         _currentTenant.SetTenant(user.TenantId);
 
-        // lockoutOnFailure: true → κάθε αποτυχία αυξάνει το AccessFailedCount· στις 5 ο λογαριασμός
-        // κλειδώνει για 15' (βλ. Lockout options στο Program.cs). Επιτυχές login το μηδενίζει.
         var passwordCheck = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
 
         if (passwordCheck.IsLockedOut)
         {
-            // 423 Locked: ξεχωριστό από το 401 ώστε το UI να δείχνει σαφές μήνυμα στον χρήστη.
             return StatusCode(StatusCodes.Status423Locked, new
             {
                 message = "Ο λογαριασμός κλειδώθηκε προσωρινά λόγω πολλών αποτυχημένων προσπαθειών. Δοκιμάστε ξανά σε λίγα λεπτά.",
@@ -108,9 +99,6 @@ public class AuthController : ControllerBase
             return BadRequest("Invalid, expired, or already used invitation token.");
         }
 
-        // Γνωστό tenant πλέον (από το invitation) — ίδιο σκεπτικό με το login: πρέπει να μπει
-        // πριν το CreateAsync, αλλιώς ο εσωτερικός uniqueness-check του Identity θα έψαχνε με
-        // CurrentTenant = Guid.Empty.
         _currentTenant.SetTenant(invitation.TenantId);
 
         var user = new ApplicationUser
@@ -131,9 +119,6 @@ public class AuthController : ControllerBase
             return BadRequest(result.Errors.Select(e => e.Description));
         }
 
-        // Αν αποτύχει ο role assignment (π.χ. ο ρόλος δεν υπάρχει), διαγράφουμε τον μόλις
-        // δημιουργημένο χρήστη — αλλιώς το invitation θα έμενε unused αλλά το email θα ήταν ήδη
-        // "πιασμένο", και ένα retry του invitee θα κολλούσε μόνιμα σε duplicate-username 400.
         IdentityResult roleResult;
         try
         {

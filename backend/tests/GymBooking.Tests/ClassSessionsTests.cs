@@ -131,7 +131,6 @@ public class ClassSessionsTests : IClassFixture<TestApiFactory>
             new CreateClassTypeRequest("Boxing", "πυγμαχία", 60, 12));
         var classType = await ctResponse.Content.ReadFromJsonAsync<ClassTypeResponse>();
 
-        // Admin ορίζει InstructorId που δεν αντιστοιχεί σε χρήστη του tenant.
         var response = await client.PostAsJsonAsync("/class-sessions",
             new CreateClassSessionRequest(classType!.Id, Guid.NewGuid(), DateTime.UtcNow.AddDays(1), 60, 12));
 

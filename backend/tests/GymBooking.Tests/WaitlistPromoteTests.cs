@@ -64,7 +64,7 @@ public class WaitlistPromoteTests
         Booking booking;
         using (var scope = _factory.Services.CreateScope())
         {
-            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId); // γεμίζει
+            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId);
             booking = b!;
         }
         using (var scope = _factory.Services.CreateScope())
@@ -73,7 +73,7 @@ public class WaitlistPromoteTests
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            await Booking(scope, tenantId).CancelAsync(holder, booking.Id); // ελευθερώνει → promote waiter
+            await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
         }
 
         Assert.True(await HasConfirmedBookingAsync(tenantId, waiter, sessionId));
@@ -82,12 +82,10 @@ public class WaitlistPromoteTests
     [Fact]
     public async Task Promote_skips_waiter_with_unusable_subscription_and_takes_next()
     {
-        // Safety-net του auto-promote: μπαίνεις στη λίστα με έγκυρη συνδρομή, αλλά μέχρι να
-        // ελευθερωθεί θέση η συνδρομή ακυρώθηκε/έληξε → σε προσπερνά και προωθεί τον επόμενο.
         var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
         var holder = Guid.NewGuid();
-        var lostSub = Guid.NewGuid();    // 1ος στη λίστα· η συνδρομή του θα ακυρωθεί πριν το promote → skip
-        var withSub = Guid.NewGuid();    // 2ος, με ενεργή συνδρομή → προωθείται
+        var lostSub = Guid.NewGuid();
+        var withSub = Guid.NewGuid();
         await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
         await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, lostSub);
         await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, withSub);
@@ -100,15 +98,14 @@ public class WaitlistPromoteTests
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            await Waitlist(scope, tenantId).JoinAsync(lostSub, sessionId);  // μπαίνει 1ος (με συνδρομή)
+            await Waitlist(scope, tenantId).JoinAsync(lostSub, sessionId);
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            await Waitlist(scope, tenantId).JoinAsync(withSub, sessionId);  // μπαίνει 2ος
+            await Waitlist(scope, tenantId).JoinAsync(withSub, sessionId);
         }
         using (var scope = _factory.Services.CreateScope())
         {
-            // Ακύρωση της συνδρομής του 1ου μετά την είσοδό του στη λίστα.
             scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var sub = await db.Subscriptions.FirstAsync(s => s.UserId == lostSub);
@@ -120,8 +117,8 @@ public class WaitlistPromoteTests
             await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
         }
 
-        Assert.False(await HasConfirmedBookingAsync(tenantId, lostSub, sessionId));  // skipped
-        Assert.True(await HasConfirmedBookingAsync(tenantId, withSub, sessionId));   // promoted
+        Assert.False(await HasConfirmedBookingAsync(tenantId, lostSub, sessionId));
+        Assert.True(await HasConfirmedBookingAsync(tenantId, withSub, sessionId));
     }
 
     [Fact]
