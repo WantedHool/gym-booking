@@ -43,6 +43,8 @@ public class BookingService
                 return (BookingOutcome.SessionCancelled, null);
             }
 
+            await LockUserAsync(userId);
+
             var alreadyBooked = await _dbContext.Bookings
                 .AnyAsync(b => b.UserId == userId && b.ClassSessionId == classSessionId && b.Status == BookingStatus.Confirmed);
             if (alreadyBooked)
@@ -110,26 +112,38 @@ public class BookingService
 
             await using var tx = await _dbContext.Database.BeginTransactionAsync();
 
-            var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId);
+            var snapshot = await _dbContext.Bookings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == bookingId);
+            if (snapshot is null)
+            {
+                return (BookingOutcome.SessionNotFound, null);
+            }
+            if (ownerUserId is Guid oid && snapshot.UserId != oid)
+            {
+                return (BookingOutcome.SessionNotFound, null);
+            }
+
+            var session = await _dbContext.ClassSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {snapshot.ClassSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
+
+            var booking = await _dbContext.Bookings
+                .FromSqlInterpolated($@"SELECT * FROM ""Bookings"" WHERE ""Id"" = {bookingId} AND ""TenantId"" = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .AsTracking()
+                .FirstOrDefaultAsync();
             if (booking is null)
             {
                 return (BookingOutcome.SessionNotFound, null);
             }
-            if (ownerUserId is Guid oid && booking.UserId != oid)
-            {
-                return (BookingOutcome.SessionNotFound, null);
-            }
 
-            if (booking.Status == BookingStatus.Cancelled)
+            if (booking.Status != BookingStatus.Confirmed)
             {
                 return (BookingOutcome.Success, booking);
             }
-
-            var session = await _dbContext.ClassSessions
-                .FromSqlInterpolated($@"SELECT * FROM ""ClassSessions"" WHERE ""Id"" = {booking.ClassSessionId} AND ""TenantId"" = {tenantId} FOR UPDATE")
-                .IgnoreQueryFilters()
-                .AsTracking()
-                .FirstOrDefaultAsync();
 
             if (enforceWindow && session is not null)
             {
@@ -171,6 +185,8 @@ public class BookingService
 
                 foreach (var entry in waiting)
                 {
+                    await LockUserAsync(entry.UserId);
+
                     var entryAlreadyBooked = await _dbContext.Bookings
                         .AnyAsync(b => b.UserId == entry.UserId && b.ClassSessionId == booking.ClassSessionId && b.Status == BookingStatus.Confirmed);
                     if (entryAlreadyBooked)
@@ -267,6 +283,12 @@ public class BookingService
                 b.Status.ToString(),
                 b.CreatedAt))
             .ToListAsync();
+    }
+
+    private async Task LockUserAsync(Guid userId)
+    {
+        var lockKey = BitConverter.ToInt64(userId.ToByteArray(), 0);
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})");
     }
 
     private async Task<bool> HasTimeConflictAsync(Guid userId, ClassSession session)

@@ -52,6 +52,29 @@ public class BookingTests
         return (tenantId, session.Id);
     }
 
+    private async Task<Guid> AddSessionAsync(Guid tenantId, int capacity, DateTime startsAtUtc, int durationMinutes = 60)
+    {
+        using var scope = _factory.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var classTypeId = await db.ClassTypes.Select(c => c.Id).FirstAsync();
+        var session = new ClassSession
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClassTypeId = classTypeId,
+            InstructorId = Guid.NewGuid(),
+            StartsAt = startsAtUtc,
+            DurationMinutes = durationMinutes,
+            Capacity = capacity,
+            BookedCount = 0,
+            IsActive = true,
+        };
+        db.ClassSessions.Add(session);
+        await db.SaveChangesAsync();
+        return session.Id;
+    }
+
     private async Task<(BookingOutcome Outcome, Booking? Booking)> BookAsync(Guid tenantId, Guid userId, Guid sessionId)
     {
         using var scope = _factory.Services.CreateScope();
@@ -220,5 +243,49 @@ public class BookingTests
         Assert.Equal(capacity, successes);
         Assert.Equal(attempts - capacity, full);
         Assert.Equal(capacity, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+    }
+
+    [Fact]
+    public async Task Concurrent_cancels_of_same_booking_release_one_spot_and_refund_once()
+    {
+        const int attempts = 10;
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 5, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var canceller = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        await TestData.GiveSessionPackAsync(_factory.Services, tenantId, canceller, sessions: 5);
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, other);
+        var (_, booking) = await BookAsync(tenantId, canceller, sessionId);
+        await BookAsync(tenantId, other, sessionId);
+
+        var tasks = Enumerable.Range(0, attempts)
+            .Select(_ => CancelAsync(tenantId, canceller, booking!.Id))
+            .ToArray();
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, r => Assert.Equal(BookingOutcome.Success, r.Outcome));
+        Assert.Equal(1, (await GetSessionAsync(tenantId, sessionId)).BookedCount);
+        Assert.Equal(5, await TestData.GetRemainingAsync(_factory.Services, tenantId, canceller));
+    }
+
+    [Fact]
+    public async Task Concurrent_bookings_of_overlapping_sessions_by_same_user_allow_only_one()
+    {
+        const int rounds = 20;
+        var startsAt = DateTime.UtcNow.AddDays(1);
+        var (tenantId, firstSessionId) = await SeedSessionAsync(capacity: rounds, startsAtUtc: startsAt);
+        var secondSessionId = await AddSessionAsync(tenantId, capacity: rounds, startsAtUtc: startsAt.AddMinutes(30));
+
+        for (var round = 0; round < rounds; round++)
+        {
+            var userId = Guid.NewGuid();
+            await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, userId);
+
+            var results = await Task.WhenAll(
+                BookAsync(tenantId, userId, firstSessionId),
+                BookAsync(tenantId, userId, secondSessionId));
+
+            Assert.Equal(1, results.Count(r => r.Outcome == BookingOutcome.Success));
+            Assert.Equal(1, results.Count(r => r.Outcome == BookingOutcome.TimeConflict));
+        }
     }
 }

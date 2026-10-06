@@ -145,4 +145,48 @@ public class WaitlistPromoteTests
         var session = await db.ClassSessions.FirstAsync(s => s.Id == sessionId);
         Assert.Equal(0, session.BookedCount);
     }
+
+    [Fact]
+    public async Task Concurrent_cancels_of_same_booking_promote_only_one_waiter()
+    {
+        const int attempts = 10;
+        var (tenantId, sessionId) = await SeedSessionAsync(capacity: 1, startsAtUtc: DateTime.UtcNow.AddDays(1));
+        var holder = Guid.NewGuid();
+        var waiters = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToArray();
+        await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, holder);
+        foreach (var waiter in waiters)
+        {
+            await TestData.GiveUnlimitedAsync(_factory.Services, tenantId, waiter);
+        }
+
+        Booking booking;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var (_, b) = await Booking(scope, tenantId).BookAsync(holder, sessionId);
+            booking = b!;
+        }
+        foreach (var waiter in waiters)
+        {
+            using var scope = _factory.Services.CreateScope();
+            await Waitlist(scope, tenantId).JoinAsync(waiter, sessionId);
+        }
+
+        var tasks = Enumerable.Range(0, attempts)
+            .Select(async _ =>
+            {
+                using var scope = _factory.Services.CreateScope();
+                return await Booking(scope, tenantId).CancelAsync(holder, booking.Id);
+            })
+            .ToArray();
+        await Task.WhenAll(tasks);
+
+        using var check = _factory.Services.CreateScope();
+        check.ServiceProvider.GetRequiredService<CurrentTenant>().SetTenant(tenantId);
+        var db = check.ServiceProvider.GetRequiredService<AppDbContext>();
+        var confirmed = await db.Bookings.CountAsync(b => b.ClassSessionId == sessionId && b.Status == BookingStatus.Confirmed);
+        var session = await db.ClassSessions.FirstAsync(s => s.Id == sessionId);
+        Assert.Equal(1, confirmed);
+        Assert.Equal(1, session.BookedCount);
+        Assert.True(await HasConfirmedBookingAsync(tenantId, waiters[0], sessionId));
+    }
 }
